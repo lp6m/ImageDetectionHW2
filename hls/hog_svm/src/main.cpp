@@ -91,10 +91,31 @@ void compute_mag_and_bin(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<a
 	}
 }
 
+template<int W, int U, int TI, int TD>
+    struct ap_int9_axis{
+        struct data {
+            ap_int<W> data0;
+            ap_int<W> data1;
+            ap_int<W> data2;
+            ap_int<W> data3;
+            ap_int<W> data4;
+            ap_int<W> data5;
+            ap_int<W> data6;
+            ap_int<W> data7;
+            ap_int<W> data8;
+        } data;
+        ap_uint<(W+7)/8> keep;
+        ap_uint<(W+7)/8> strb;
+        ap_uint<U>       user;
+        ap_uint<1>       last;
+        ap_uint<TI>      id;
+        ap_uint<TD>      dest;
+    };
+
 typedef hls::stream<ap_axis<32,1,1,1> > block_out;
 void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::stream<ap_axis<32,1,1,1> >& binstream,
-		block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
-		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8){
+		hls::stream<ap_int9_axis<32,1,1,1> >& bottom, hls::stream<ap_int9_axis<32,1,1,1> >& upper){
+
 
 	hls::LineBuffer<CELL_SIZE, IMAGE_WIDTH/CELL_SIZE, int> linebufs[HIST_BIN_NUM];
 	hls::LineBuffer<2, IMAGE_WIDTH/CELL_SIZE, int> cellbuf[HIST_BIN_NUM];
@@ -117,41 +138,45 @@ void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::st
 						linebufs[i].insert_bottom_row(vote_counter[i], winx);
 					}
 					if(y%8 == 7){
+						ap_int9_axis<32,1,1,1> out_upper, out_bottom;
 						loop_cellbuf_calc:for(int bin_index = 0; bin_index < HIST_BIN_NUM; bin_index++){
 							int sum_of_cell = linebufs[bin_index].getval(0, winx) + linebufs[bin_index].getval(1, winx) + linebufs[bin_index].getval(2, winx) + linebufs[bin_index].getval(3, winx) + linebufs[bin_index].getval(4, winx) + linebufs[bin_index].getval(5, winx) + linebufs[bin_index].getval(6, winx) + linebufs[bin_index].getval(7, winx);//sum_of_cell[bin_index] =
 							cellbuf[bin_index].shift_pixels_up(winx);
 							cellbuf[bin_index].insert_bottom_row(sum_of_cell, winx);
 							if(y >= 15){
-								ap_axis<32,1,1,1> upper, bottom;
-								upper.data = cellbuf[bin_index].getval(0, winx);
-								bottom.data = cellbuf[bin_index].getval(1, winx);
+								//ap_axis<32,1,1,1> upper, bottom;
+								int upper_d, bottom_d;
+								upper_d = cellbuf[bin_index].getval(0, winx);
+								bottom_d = cellbuf[bin_index].getval(1, winx);
 								if(bin_index == 0){
-									upper0 << upper;
-									bottom0 << bottom;
+									out_upper.data.data0 = upper_d;
+									out_bottom.data.data0 = bottom_d;
 								}else if(bin_index == 1){
-									upper1 << upper;
-									bottom1 << bottom;
+									out_upper.data.data1 = upper_d;
+									out_bottom.data.data1 = bottom_d;
 								}else if(bin_index == 2){
-									upper2 << upper;
-									bottom2 << bottom;
+									out_upper.data.data2 = upper_d;
+									out_bottom.data.data2 = bottom_d;
 								}else if(bin_index == 3){
-									upper3 << upper;
-									bottom3 << bottom;
+									out_upper.data.data3 = upper_d;
+									out_bottom.data.data4 = bottom_d;
 								}else if(bin_index == 4){
-									upper4 << upper;
-									bottom4 << bottom;
+									out_upper.data.data4 = upper_d;
+									out_bottom.data.data4 = bottom_d;
 								}else if(bin_index == 5){
-									upper5 << upper;
-									bottom5 << bottom;
+									out_upper.data.data5 = upper_d;
+									out_bottom.data.data5 = bottom_d;
 								}else if(bin_index == 6){
-									upper6 << upper;
-									bottom6 << bottom;
+									out_upper.data.data6 = upper_d;
+									out_bottom.data.data6 = bottom_d;
 								}else if(bin_index == 7){
-									upper7 << upper;
-									bottom7 << bottom;
+									out_upper.data.data7 = upper_d;
+									out_bottom.data.data7 = bottom_d;
 								}else{//if(bin_index == 8)
-									upper8 << upper;
-									bottom8 << bottom;
+									out_upper.data.data8 = upper_d;
+									out_bottom.data.data8 = bottom_d;
+									bottom << out_bottom;
+									upper << out_upper;
 								}
 							}
 						}
@@ -220,33 +245,14 @@ void block_histogram_normalization(block_out& bottom0, block_out& bottom1, block
 	}
 }
 
-void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream,
-		block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
-		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8){
+void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_int9_axis<32,1,1,1> >& bottom, hls::stream<ap_int9_axis<32,1,1,1> >& upper){
 	hls::stream<ap_axis<32,1,1,1> > magstream;
 	hls::stream<ap_axis<32,1,1,1> > binstream;
 #pragma HLS INTERFACE axis port=instream
-#pragma HLS INTERFACE axis port=bottom0
-#pragma HLS INTERFACE axis port=bottom1
-#pragma HLS INTERFACE axis port=bottom2
-#pragma HLS INTERFACE axis port=bottom3
-#pragma HLS INTERFACE axis port=bottom4
-#pragma HLS INTERFACE axis port=bottom5
-#pragma HLS INTERFACE axis port=bottom6
-#pragma HLS INTERFACE axis port=bottom7
-#pragma HLS INTERFACE axis port=bottom8
-#pragma HLS INTERFACE axis port=upper0
-#pragma HLS INTERFACE axis port=upper1
-#pragma HLS INTERFACE axis port=upper2
-#pragma HLS INTERFACE axis port=upper3
-#pragma HLS INTERFACE axis port=upper4
-#pragma HLS INTERFACE axis port=upper5
-#pragma HLS INTERFACE axis port=upper6
-#pragma HLS INTERFACE axis port=upper7
-#pragma HLS INTERFACE axis port=upper8
+#pragma HLS INTERFACE axis port=bottom
+#pragma HLS INTERFACE axis port=upper
 
 #pragma HLS DATAFLOW
 	compute_mag_and_bin(instream, magstream, binstream);
-	cell_histogram_generate(magstream, binstream, bottom0, bottom1, bottom2, bottom3, bottom4, bottom5, bottom6, bottom7, bottom8,
-			upper0, upper1, upper2, upper3, upper4, upper5, upper6, upper7, upper8);
+	cell_histogram_generate(magstream, binstream, bottom, upper);
 }
