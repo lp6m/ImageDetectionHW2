@@ -164,6 +164,62 @@ void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::st
 	}
 }
 
+void block_histogram_normalization(block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
+		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8){
+	hls::LineBuffer<2, 1, int> bottomfifo[HIST_BIN_NUM], upperfifo[HIST_BIN_NUM];
+	int partial_block_sum;
+#pragma HLS ARRAY_PARTITION variable=bottomfifo complete dim=1
+#pragma HLS ARRAY PARTITION variable=upperfifo complete dim=1
+	for(int y = 0; y < (IMAGE_HEIGHT / CELL_SIZE - BLOCK_SIZE + 1); y++){
+		for(int x = 0; x < (IMAGE_WIDTH / CELL_SIZE); x++){
+			for(int bin_index = 0; bin_index < HIST_BIN_NUM; bin_index++){
+#pragma HLS PIPELINE II=1
+				int b, u;
+				if(bin_index == 0) b = bottom0.read().data;
+				if(bin_index == 0) u = upper0.read().data;
+				if(bin_index == 1) b = bottom1.read().data;
+				if(bin_index == 1) u = upper1.read().data;
+				if(bin_index == 2) b = bottom2.read().data;
+				if(bin_index == 2) u = upper2.read().data;
+				if(bin_index == 3) b = bottom3.read().data;
+				if(bin_index == 3) u = upper3.read().data;
+				if(bin_index == 4) b = bottom4.read().data;
+				if(bin_index == 4) u = upper4.read().data;
+				if(bin_index == 5) b = bottom5.read().data;
+				if(bin_index == 5) u = upper5.read().data;
+				if(bin_index == 6) b = bottom6.read().data;
+				if(bin_index == 6) u = upper6.read().data;
+				if(bin_index == 7) b = bottom7.read().data;
+				if(bin_index == 7) u = upper7.read().data;
+				if(bin_index == 8) b = bottom8.read().data;
+				if(bin_index == 8) u = upper8.read().data;
+
+				bottomfifo[bin_index].shift_pixels_up(0);
+				bottomfifo[bin_index].insert_bottom(b, 0);
+				upperfifo[bin_index].shift_pixels_up(0);
+				upperfifo[bin_index].insert_bottom(u, 0);
+
+				int partial_block_new_sum = b + u;
+				int block_sum = partial_block_new_sum + partial_block_sum;
+				partial_block_sum = partial_block_new_sum;
+
+				bool sum_of_block_completed = (x >= 1);
+				if(sum_of_block_completed){
+					//normalization
+					int un_upperleft = upperfifo[bin_index].getval(0, 0);
+					int un_upperright = upperfifo[bin_index].getval(1, 0);
+					int un_bottomleft = bottomfifo[bin_index].getval(0, 0);
+					int un_bottomright = bottomfifo[bin_index].getval(1, 0);
+					int upperleft = block_sum == 0 ? 0 : sqrt((un_upperleft / block_sum) << 1);
+					int upperright = block_sum == 0 ? 0 : sqrt((un_upperright / block_sum) << 1);
+					int bottomleft = block_sum == 0 ? 0 : sqrt((un_bottomleft / block_sum) << 1);
+					int bottomright = block_sum == 0 ? 0 : sqrt((un_bottomright / block_sum) << 1);
+				}
+			}
+		}
+	}
+}
+
 void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream,
 		block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
 		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8){
@@ -193,7 +249,4 @@ void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream,
 	compute_mag_and_bin(instream, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom0, bottom1, bottom2, bottom3, bottom4, bottom5, bottom6, bottom7, bottom8,
 			upper0, upper1, upper2, upper3, upper4, upper5, upper6, upper7, upper8);
-
-	//normalizeBlock(sum_of_block, descriptor, normalized);
-	//memcpy(feature, normalized, HISTOGRAMSIZE * sizeof(unsigned short));
 }

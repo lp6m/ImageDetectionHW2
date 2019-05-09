@@ -87,10 +87,6 @@ int main(){
 			err = true;
 		}
 	}
-	while(!bottom0.empty()){
-		int hw_bottom = bottom0.read().data;
-		cout << "un" << endl;
-	}
 
 	if(!err) return 0;
 	else return -1;
