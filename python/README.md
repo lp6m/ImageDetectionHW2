@@ -1,5 +1,5 @@
 ### Python
-Python3 and Scikit-learn are used to train object, and extracted trained classifier paramet
+Python3 and Scikit-learn are used to train object, and extracted trained classifier parameter  
 
 #### vdtools.py
 MainClass, this refers [https://github.com/t-lanigan/vehicle-detection-and-tracking](https://github.com/t-lanigan/vehicle-detection-and-tracking) repository.  
