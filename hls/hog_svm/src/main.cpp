@@ -6,11 +6,14 @@
 
 #define IMAGE_WIDTH 640
 #define IMAGE_HEIGHT 480
-#define WINDOW_WIDTH 64
-#define WINDOW_HEIGHT 32
+#define WINDOW_BLOCKNUM_W 7
+#define WINDOW_BLOCKNUM_H 15
 #define CELL_SIZE 8
 #define BLOCK_SIZE 2
 #define HIST_BIN_NUM 9
+#define WINDOW_NUM_W IMAGE_WIDTH / CELL_SIZE - WINDOW_BLOCKNUM_W
+#define BLOCK_NUM_W IMAGE_WIDTH / CELL_SIZE - 1
+#define BLOCK_NUM_H IMAGE_HEIGHT / CELL_SIZE - 1
 
 inline int approx_distance(int dx, int dy){
 	int min, max; //uint
@@ -125,25 +128,24 @@ void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::st
 #pragma HLS ARRAY_PARTITION variable=vote_counter complete dim=1
 	loop_y:for(int y = 0; y < IMAGE_HEIGHT; y++){
 		loop_winx:for(int winx = 0; winx < IMAGE_WIDTH / CELL_SIZE; winx++){
-			//int output_count = 9;
 			loop_cell_index:for(int cell_index = 0; cell_index < CELL_SIZE; cell_index++){
 #pragma HLS PIPELINE II=1
 				ap_axis<32,1,1,1> mag, bin;
 				magstream >> mag;
 				binstream >> bin;
 				vote_counter[(int)bin.data] += mag.data;
-				if(cell_index == 7){
+				if(cell_index == (CELL_SIZE - 1)){
 					loop_updatelinebuf:for(int i = 0; i < HIST_BIN_NUM; i++){
 						linebufs[i].shift_pixels_up(winx);
 						linebufs[i].insert_bottom_row(vote_counter[i], winx);
 					}
-					if(y%8 == 7){
+					if(y%CELL_SIZE == (CELL_SIZE - 1)){
 						ap_int9_axis<32,1,1,1> out_upper, out_bottom;
 						loop_cellbuf_calc:for(int bin_index = 0; bin_index < HIST_BIN_NUM; bin_index++){
 							int sum_of_cell = linebufs[bin_index].getval(0, winx) + linebufs[bin_index].getval(1, winx) + linebufs[bin_index].getval(2, winx) + linebufs[bin_index].getval(3, winx) + linebufs[bin_index].getval(4, winx) + linebufs[bin_index].getval(5, winx) + linebufs[bin_index].getval(6, winx) + linebufs[bin_index].getval(7, winx);//sum_of_cell[bin_index] =
 							cellbuf[bin_index].shift_pixels_up(winx);
 							cellbuf[bin_index].insert_bottom_row(sum_of_cell, winx);
-							if(y >= 15){
+							if(y >= CELL_SIZE * BLOCK_SIZE - 1){
 								//ap_axis<32,1,1,1> upper, bottom;
 								int upper_d, bottom_d;
 								upper_d = cellbuf[bin_index].getval(0, winx);
@@ -189,36 +191,39 @@ void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::st
 	}
 }
 
-void block_histogram_normalization(block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
-		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8){
+void block_histogram_normalization(hls::stream<ap_int9_axis<32,1,1,1> >& bottom, hls::stream<ap_int9_axis<32,1,1,1> >& upper,
+		hls::stream<ap_int9_axis<32,1,1,1> >& ul_out, hls::stream<ap_int9_axis<32,1,1,1> >& ur_out, hls::stream<ap_int9_axis<32,1,1,1> >& bl_out, hls::stream<ap_int9_axis<32,1,1,1> >& br_out){
+
 	hls::LineBuffer<2, 1, int> bottomfifo[HIST_BIN_NUM], upperfifo[HIST_BIN_NUM];
 	int partial_block_sum;
 #pragma HLS ARRAY_PARTITION variable=bottomfifo complete dim=1
 #pragma HLS ARRAY PARTITION variable=upperfifo complete dim=1
-	for(int y = 0; y < (IMAGE_HEIGHT / CELL_SIZE - BLOCK_SIZE + 1); y++){
-		for(int x = 0; x < (IMAGE_WIDTH / CELL_SIZE); x++){
+	for(int y = 0; y < (IMAGE_HEIGHT / CELL_SIZE - BLOCK_SIZE + 1); y++){//59
+		for(int x = 0; x < (IMAGE_WIDTH / CELL_SIZE); x++){//80
+			ap_int9_axis<32,1,1,1> bottom_in = bottom.read();
+			ap_int9_axis<32,1,1,1> upper_in = upper.read();
+			ap_int9_axis<32,1,1,1> ul, ur, bl, br;
 			for(int bin_index = 0; bin_index < HIST_BIN_NUM; bin_index++){
 #pragma HLS PIPELINE II=1
 				int b, u;
-				if(bin_index == 0) b = bottom0.read().data;
-				if(bin_index == 0) u = upper0.read().data;
-				if(bin_index == 1) b = bottom1.read().data;
-				if(bin_index == 1) u = upper1.read().data;
-				if(bin_index == 2) b = bottom2.read().data;
-				if(bin_index == 2) u = upper2.read().data;
-				if(bin_index == 3) b = bottom3.read().data;
-				if(bin_index == 3) u = upper3.read().data;
-				if(bin_index == 4) b = bottom4.read().data;
-				if(bin_index == 4) u = upper4.read().data;
-				if(bin_index == 5) b = bottom5.read().data;
-				if(bin_index == 5) u = upper5.read().data;
-				if(bin_index == 6) b = bottom6.read().data;
-				if(bin_index == 6) u = upper6.read().data;
-				if(bin_index == 7) b = bottom7.read().data;
-				if(bin_index == 7) u = upper7.read().data;
-				if(bin_index == 8) b = bottom8.read().data;
-				if(bin_index == 8) u = upper8.read().data;
-
+				if(bin_index == 0) b = bottom_in.data.data0;
+				if(bin_index == 0) u = upper_in.data.data0;
+				if(bin_index == 1) b = bottom_in.data.data1;
+				if(bin_index == 1) u = upper_in.data.data1;
+				if(bin_index == 2) b = bottom_in.data.data2;
+				if(bin_index == 2) u = upper_in.data.data2;
+				if(bin_index == 3) b = bottom_in.data.data3;
+				if(bin_index == 3) u = upper_in.data.data3;
+				if(bin_index == 4) b = bottom_in.data.data4;
+				if(bin_index == 4) u = upper_in.data.data4;
+				if(bin_index == 5) b = bottom_in.data.data5;
+				if(bin_index == 5) u = upper_in.data.data5;
+				if(bin_index == 6) b = bottom_in.data.data6;
+				if(bin_index == 6) u = upper_in.data.data6;
+				if(bin_index == 7) b = bottom_in.data.data7;
+				if(bin_index == 7) u = upper_in.data.data7;
+				if(bin_index == 8) b = bottom_in.data.data8;
+				if(bin_index == 8) u = upper_in.data.data8;
 				bottomfifo[bin_index].shift_pixels_up(0);
 				bottomfifo[bin_index].insert_bottom(b, 0);
 				upperfifo[bin_index].shift_pixels_up(0);
@@ -230,6 +235,7 @@ void block_histogram_normalization(block_out& bottom0, block_out& bottom1, block
 
 				bool sum_of_block_completed = (x >= 1);
 				if(sum_of_block_completed){
+					//59*79
 					//normalization
 					int un_upperleft = upperfifo[bin_index].getval(0, 0);
 					int un_upperright = upperfifo[bin_index].getval(1, 0);
@@ -239,20 +245,129 @@ void block_histogram_normalization(block_out& bottom0, block_out& bottom1, block
 					int upperright = block_sum == 0 ? 0 : sqrt((un_upperright / block_sum) << 1);
 					int bottomleft = block_sum == 0 ? 0 : sqrt((un_bottomleft / block_sum) << 1);
 					int bottomright = block_sum == 0 ? 0 : sqrt((un_bottomright / block_sum) << 1);
+
+					switch(bin_index){
+					case 0:
+						ul.data.data0 = upperleft; ur.data.data0 = upperright;
+						bl.data.data0 = bottomleft; br.data.data0 = bottomright;
+						break;
+					case 1:
+						ul.data.data1 = upperleft; ur.data.data1 = upperright;
+						bl.data.data1 = bottomleft; br.data.data1 = bottomright;
+						break;
+					case 2:
+						ul.data.data2 = upperleft; ur.data.data2 = upperright;
+						bl.data.data2 = bottomleft; br.data.data2 = bottomright;
+						break;
+					case 3:
+						ul.data.data3 = upperleft; ur.data.data3 = upperright;
+						bl.data.data3 = bottomleft; br.data.data3 = bottomright;
+						break;
+					case 4:
+						ul.data.data4 = upperleft; ur.data.data4 = upperright;
+						bl.data.data4 = bottomleft; br.data.data4 = bottomright;
+						break;
+					case 5:
+						ul.data.data5 = upperleft; ur.data.data5 = upperright;
+						bl.data.data5 = bottomleft; br.data.data5 = bottomright;
+						break;
+					case 6:
+						ul.data.data6 = upperleft; ur.data.data6 = upperright;
+						bl.data.data6 = bottomleft; br.data.data6 = bottomright;
+						break;
+					case 7:
+						ul.data.data7 = upperleft; ur.data.data7 = upperright;
+						bl.data.data7 = bottomleft; br.data.data7 = bottomright;
+						break;
+					case 8:
+						ul.data.data8 = upperleft; ur.data.data8 = upperright;
+						bl.data.data8 = bottomleft; br.data.data8 = bottomright;
+						break;
+					}
+				}
+			}
+			ul_out << ul;
+			ur_out << ur;
+			bl_out << bl;
+			br_out << br;
+		}
+	}
+}
+struct histdata{
+	int data[9];
+};
+struct weight{
+	histdata upperleft;
+	histdata upperright;
+	histdata bottomleft;
+	histdata bottomright;
+};
+
+int multiply_accum(histdata weights, ap_int9_axis<32,1,1,1> features){
+	return weights.data[0] * features.data.data0 + weights.data[1] * features.data.data1 + weights.data[2] * features.data.data2
+			+ weights.data[3] * features.data.data3 + weights.data[4] * features.data.data4 + weights.data[5] * features.data.data5
+			+ weights.data[6] * features.data.data6 + weights.data[7] * features.data.data7 + weights.data[8] * features.data.data8;
+}
+void svm_classification(hls::stream<ap_int9_axis<32,1,1,1> >& upperleft, hls::stream<ap_int9_axis<32,1,1,1> >& upperright, hls::stream<ap_int9_axis<32,1,1,1> >& bottomleft, hls::stream<ap_int9_axis<32,1,1,1> >& bottomright,
+		hls::stream<ap_axis<8,1,1,1> >& result, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream){
+	weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W];
+#pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
+	int PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
+#pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
+
+	int bias = 2;
+	for(int y = 0; y < BLOCK_NUM_H; y++){
+		for(int x = 0; x < BLOCK_NUM_W; x++){
+			ap_int9_axis<32,1,1,1> ul = upperleft.read();
+			ap_int9_axis<32,1,1,1> ur = upperright.read();
+			ap_int9_axis<32,1,1,1> bl = bottomleft.read();
+			ap_int9_axis<32,1,1,1> br = bottomright.read();
+			for(int winx = 0; winx < WINDOW_NUM_W; winx++){
+#pragma HLS PIPELINE II=1
+				bool inside_window = (winx <= x && x <= winx + (WINDOW_BLOCKNUM_W - 1));
+				if(inside_window){
+					int block_index_x = x - winx;
+					bool window_completed = ((x - winx) == (WINDOW_BLOCKNUM_W - 1));
+
+					//calc partial sum and update
+					int sum_of_vertical_partial_sum = 0;
+					for(int block_index_y = 0; block_index_y < WINDOW_BLOCKNUM_H; block_index_y++){
+						weight w = WeightData[block_index_y][block_index_x];
+						int tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
+								+ multiply_accum(w.bottomleft, bl) + multiply_accum(w.bottomright, br);
+						int old_partial_sum = PartialSum[block_index_y][winx];
+						int new_partial_sum = old_partial_sum + tmp_partial_sum;
+						PartialSum[block_index_y][winx] = new_partial_sum;
+						sum_of_vertical_partial_sum += new_partial_sum;
+					}
+					//if window is completed, calculate sum of vertical partial sum, and plus bias
+					if(window_completed){
+						int result = ((sum_of_vertical_partial_sum + bias));
+
+
+					}
+
 				}
 			}
 		}
 	}
+
 }
 
-void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_int9_axis<32,1,1,1> >& bottom, hls::stream<ap_int9_axis<32,1,1,1> >& upper){
+void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_axis<8,1,1,1> >& result, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream){
 	hls::stream<ap_axis<32,1,1,1> > magstream;
 	hls::stream<ap_axis<32,1,1,1> > binstream;
+	hls::stream<ap_int9_axis<32,1,1,1> > bottom, upper;
+	hls::stream<ap_int9_axis<32,1,1,1> > ul_out, ur_out, bl_out, br_out;
 #pragma HLS INTERFACE axis port=instream
-#pragma HLS INTERFACE axis port=bottom
-#pragma HLS INTERFACE axis port=upper
+#pragma HLS INTERFACE axis port=result
+#pragma HLS INTERFACE axis port=ystream
+#pragma HLS INTERFACE axis port=xstream
+
 
 #pragma HLS DATAFLOW
 	compute_mag_and_bin(instream, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom, upper);
+	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
+	svm_classification(ul_out, ur_out, bl_out, br_out, result, ystream, xstream);
 }
