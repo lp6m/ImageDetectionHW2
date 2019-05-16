@@ -7,7 +7,7 @@ This file contains many unnecessary methods for now.
 This file is module, so this file is not executed alone.  
 
 ### myhog.py
-This file is module, so this file is not executed alone.
+This file is module, so this file is not executed alone.  
 In this repo, scikit-learn HOG function is not used. This module extracts L-1 sqrt normalized HOG feature.
 
 #### train.py
