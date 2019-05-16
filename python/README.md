@@ -1,21 +1,21 @@
-###Python
+### Python
 Python3 and Scikit-learn are used to train object, and extracted trained classifier paramet
 
-####vdtools.py
+#### vdtools.py
 MainClass, this refers [https://github.com/t-lanigan/vehicle-detection-and-tracking](https://github.com/t-lanigan/vehicle-detection-and-tracking) repository.  
 This file contains many unnecessary methods for now.  
 This file is module, so this file is not executed alone.  
 
-###myhog.py
+### myhog.py
 This file is module, so this file is not executed alone.
 In this repo, scikit-learn HOG function is not used. This module extracts L-1 sqrt normalized HOG feature.
 
-####train.py
+#### train.py
 Train the object.  
 set `self.load_saved = True` in vdtools.py.
 
 
-###estimatetestor.py
+### estimatetestor.py
 You can check model performance on Tkinter GUI  
 
 |key              |behavior                  | 
@@ -27,7 +27,7 @@ You can check model performance on Tkinter GUI
 |drag mouse       | move a rectangle |
 
 
-###myestimator.py
+### myestimator.py
 Extract SVM parameter from trained model, and estimation is conducted without scikit-learn.  
 Extracted parameter is exported in C++ code form to ./output/weights.h  
 ```
