@@ -7,7 +7,7 @@
 #define IMAGE_WIDTH 640
 #define IMAGE_HEIGHT 480
 #define WINDOW_BLOCKNUM_W 7
-#define WINDOW_BLOCKNUM_H 15
+#define WINDOW_BLOCKNUM_H 3
 #define CELL_SIZE 8
 #define BLOCK_SIZE 2
 #define HIST_BIN_NUM 9
@@ -309,7 +309,7 @@ int multiply_accum(histdata weights, ap_int9_axis<32,1,1,1> features){
 			+ weights.data[6] * features.data.data6 + weights.data[7] * features.data.data7 + weights.data[8] * features.data.data8;
 }
 void svm_classification(hls::stream<ap_int9_axis<32,1,1,1> >& upperleft, hls::stream<ap_int9_axis<32,1,1,1> >& upperright, hls::stream<ap_int9_axis<32,1,1,1> >& bottomleft, hls::stream<ap_int9_axis<32,1,1,1> >& bottomright,
-		hls::stream<ap_axis<8,1,1,1> >& result, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream){
+		hls::stream<ap_axis<8,1,1,1> >& resultstream, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream){
 	weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W];
 #pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
 	int PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
@@ -317,7 +317,7 @@ void svm_classification(hls::stream<ap_int9_axis<32,1,1,1> >& upperleft, hls::st
 
 	int bias = 2;
 	for(int y = 0; y < BLOCK_NUM_H; y++){
-		for(int x = 0; x < BLOCK_NUM_W; x++){
+		for(int x = 0; x < (IMAGE_WIDTH / CELL_SIZE); x++){
 			ap_int9_axis<32,1,1,1> ul = upperleft.read();
 			ap_int9_axis<32,1,1,1> ur = upperright.read();
 			ap_int9_axis<32,1,1,1> bl = bottomleft.read();
@@ -327,7 +327,7 @@ void svm_classification(hls::stream<ap_int9_axis<32,1,1,1> >& upperleft, hls::st
 				bool inside_window = (winx <= x && x <= winx + (WINDOW_BLOCKNUM_W - 1));
 				if(inside_window){
 					int block_index_x = x - winx;
-					bool window_completed = ((x - winx) == (WINDOW_BLOCKNUM_W - 1));
+					bool window_completed = ((x - winx) == (WINDOW_BLOCKNUM_W - 1) && y >= (WINDOW_BLOCKNUM_H - 1));
 
 					//calc partial sum and update
 					int sum_of_vertical_partial_sum = 0;
@@ -343,8 +343,13 @@ void svm_classification(hls::stream<ap_int9_axis<32,1,1,1> >& upperleft, hls::st
 					//if window is completed, calculate sum of vertical partial sum, and plus bias
 					if(window_completed){
 						int result = ((sum_of_vertical_partial_sum + bias));
-
-
+						ap_axis<8,1,1,1> ap_r, ap_y, ap_x;
+						ap_r.data = result;
+						ap_y.data = y - 2;
+						ap_x.data = winx;
+						resultstream << ap_r;
+						ystream << ap_y;
+						xstream << ap_x;
 					}
 
 				}

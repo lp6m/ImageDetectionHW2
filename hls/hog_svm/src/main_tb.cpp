@@ -15,21 +15,17 @@ using namespace std;
 using namespace cv;
 
 typedef hls::stream<ap_axis<32,1,1,1> > block_out;
-void compute_mag_and_bin(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_axis<32,1,1,1> >& magstream, hls::stream<ap_axis<32,1,1,1> >& binstream);
-void cell_histogram_generate(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::stream<ap_axis<32,1,1,1> >& binstream,
-		block_out& bottom0, block_out& bottom1, block_out& bottom2, block_out& bottom3, block_out& bottom4, block_out& bottom5, block_out& bottom6, block_out& bottom7, block_out& bottom8,
-		block_out& upper0, block_out& upper1, block_out& upper2, block_out& upper3, block_out& upper4, block_out& upper5, block_out& upper6, block_out& upper7, block_out& upper8);
+void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_axis<8,1,1,1> >& result, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream);
+
 
 int main(){
 
 	cv::Mat img = cv::imread("frame.png");
-	cv::Mat resized_img;
-	cv::resize(img, resized_img, cv::Size(64, 32));
 	cv::Mat gray;
-	cv::cvtColor(resized_img, gray, CV_RGB2GRAY);
+	cv::cvtColor(img, gray, CV_RGB2GRAY);
 
 	//unsigned char image_buffer[32*64];
-	hls::stream<ap_axis<8,1,1,1> > instream, instream_host;
+	hls::stream<ap_axis<8,1,1,1> > instream;//, instream_host;
 	unsigned char image_buffer2[32][64];
 	double sw_ans[HISTOGRAMSIZE] = {0};
 	int sw_unnormalized_descriptor[HISTOGRAMSIZE];
@@ -42,11 +38,26 @@ int main(){
 			in.data = gray.ptr<uchar>(y)[x];
 			in2.data = gray.ptr<uchar>(y)[x];
 			instream << in;
-			instream_host << in2;
+			//instream_host << in2;
 		}
 	}
+	hls::stream<ap_axis<8,1,1,1> > resultstream;
+	hls::stream<ap_axis<8,1,1,1> > ystream;
+	hls::stream<ap_axis<8,1,1,1> > xstream;
+	hog_svm(instream, resultstream, ystream, xstream);
+	long long int cnt = 0;
+	while(!ystream.empty()){
+		int result = resultstream.read().data;
+		int y = ystream.read().data;
+		int x = xstream.read().data;
+		cout << "result: " << result << "y: " << y << "x: " << x << endl;
+		cnt++;
+	}
+	cout << "result num: " << cnt << endl;
+	bool err = false;
 
-	//Running SW and HW implementation
+
+	/*Running SW and HW implementation
 	hls::stream<ap_axis<32,1,1,1> > magstream, binstream, magstream_host, binstream_host;
 
 	//magnitude and binindex are generated from HW implementation
@@ -60,7 +71,6 @@ int main(){
 	cell_histogram_host(magstream_host, binstream_host);
 
 	//validation
-	bool err = false;
 	for(int i = 0; i < 59*80*9; i++){
 		int hw_bottom, hw_upper;
 		if(i % 9 == 0) hw_bottom = bottom0.read().data;
@@ -86,7 +96,7 @@ int main(){
 			cout << upper_sw_rst[i] << " " << hw_upper << " " << bottom_sw_rst[i] << " " << hw_bottom << endl;
 			err = true;
 		}
-	}
+	}*/
 
 	if(!err) return 0;
 	else return -1;
