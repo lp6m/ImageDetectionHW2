@@ -12,7 +12,7 @@ add_files -tb hog_svm/src/hog_host.cpp
 add_files -tb hog_svm/src/hog_host.h
 add_files -tb hog_svm/src/main_tb.cpp
 open_solution "solution1"
-set_part {xc7z020clg400-1} -tool vivado
+set_part {xczu3eg-sfva625-1-e}
 create_clock -period 10 -name default
 #source "./hog_svm/solution1/directives.tcl"
 csim_design -compiler gcc
