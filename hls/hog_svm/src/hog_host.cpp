@@ -32,7 +32,7 @@ inline int approx_distance(int dx, int dy){
 //for debugging
 vector<int> maglist;
 vector<int> binlist;
-
+/*
 void lite_hog(cv::Mat img, double* dst, bool approx_mode, int descriptor[HISTOGRAMSIZE]){
 	maglist.clear();
 	binlist.clear();
@@ -112,4 +112,4 @@ void cell_histogram_host(hls::stream<ap_axis<32,1,1,1> >& magstream, hls::stream
 			}
 		}
 	}
-}
+}*/

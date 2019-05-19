@@ -2,11 +2,12 @@
 #include <cmath>
 #include <string.h>
 #include <vector>
-
+#include <ap_fixed.h>
 #include <ap_axi_sdata.h>
 #include <opencv2/opencv.hpp>
 #include <hls_stream.h>
 #include <hls_video.h>
+#include <hls_math.h>
 
 #include "consts.h"
 #include "hog_host.h"
@@ -15,21 +16,47 @@ using namespace std;
 using namespace cv;
 
 typedef hls::stream<ap_axis<32,1,1,1> > block_out;
-void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_axis<8,1,1,1> >& result, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream);
+void hog_svm(hls::stream<ap_axis<8,1,1,1> >& instream, hls::stream<ap_fixed_float >& resultstream, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream);
 
+void ap_fixed_playground(){
+//test ap_fixed_behavior
+	ap_fixed<24,20> a = 28087;
+	ap_fixed<24,20> b = 65536;
 
+	ap_fixed<64,20> aa = 28087;
+	ap_fixed<64,20> bb = 65536;
+
+	const ap_fixed<64,20> eps2 = 1e-10;
+
+	ap_fixed<32,2> sqrt_target = a/b;
+	ap_fixed<32,2> sqrt_target2 = aa/bb;
+	ap_fixed<32,2> sqrt_target3 = (ap_fixed<64,20>)a/(b+eps2);
+	cout << fixed << setprecision(10) << sqrt_target << endl;
+	cout << fixed << setprecision(10) << sqrt_target2 << endl;
+	cout << fixed << setprecision(10) << sqrt_target3 << endl;
+
+	ap_fixed<32,2> sqrt_rst = hls::sqrt(sqrt_target);
+	ap_fixed<32,2> sqrt_rst2 = hls::sqrt(sqrt_target2);
+	ap_fixed<32,2> sqrt_rst3 = hls::sqrt(sqrt_target3);
+	//ap_fixed<24,2,AP_RND> sqrt_rst2 = sqrt((ap_fixed<24,20,AP_RND>)a/b);
+	//ap_fixed<32,1,AP_RND> sqrt_rst2 = sqrt(a/c);
+	cout << fixed << setprecision(10) << sqrt_rst << endl;
+	cout << fixed << setprecision(10) << sqrt_rst2 << endl;
+	cout << fixed << setprecision(10) << sqrt_rst3 << endl;
+}
 int main(){
+	ap_fixed_playground();
 
 	cv::Mat img = cv::imread("frame.png");
 	cv::Mat gray;
-	cv::cvtColor(img, gray, CV_RGB2GRAY);
+	cv::cvtColor(img, gray, CV_BGR2GRAY);
 
 	//unsigned char image_buffer[32*64];
 	hls::stream<ap_axis<8,1,1,1> > instream;//, instream_host;
 	unsigned char image_buffer2[32][64];
-	double sw_ans[HISTOGRAMSIZE] = {0};
-	int sw_unnormalized_descriptor[HISTOGRAMSIZE];
-	unsigned short hw_ans[HISTOGRAMSIZE]={0};
+	//double sw_ans[HISTOGRAMSIZE] = {0};
+	//int sw_unnormalized_descriptor[HISTOGRAMSIZE];
+	//unsigned short hw_ans[HISTOGRAMSIZE]={0};
 
 	//Input Value Preparation
 	ap_axis<8,1,1,1> in, in2;
@@ -41,21 +68,21 @@ int main(){
 			//instream_host << in2;
 		}
 	}
-	hls::stream<ap_axis<8,1,1,1> > resultstream;
+	hls::stream<ap_fixed_float> resultstream;
 	hls::stream<ap_axis<8,1,1,1> > ystream;
 	hls::stream<ap_axis<8,1,1,1> > xstream;
 	hog_svm(instream, resultstream, ystream, xstream);
+	cout << "hw call end" << endl;
 	long long int cnt = 0;
 	while(!ystream.empty()){
-		int result = resultstream.read().data;
+		double result = resultstream.read();
 		int y = ystream.read().data;
 		int x = xstream.read().data;
-		cout << "result: " << result << "y: " << y << "x: " << x << endl;
+		double sigmoid_result = 1.0/(1.0 + exp(-result));
+		if(sigmoid_result> 0.90) cout << "result: " << sigmoid_result << "y: " << y << "x: " << x << endl;
 		cnt++;
 	}
 	cout << "result num: " << cnt << endl;
-	bool err = false;
-
 
 	/*Running SW and HW implementation
 	hls::stream<ap_axis<32,1,1,1> > magstream, binstream, magstream_host, binstream_host;
@@ -97,7 +124,7 @@ int main(){
 			err = true;
 		}
 	}*/
-
+	bool err = false;
 	if(!err) return 0;
 	else return -1;
 }
