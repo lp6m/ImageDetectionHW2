@@ -40,7 +40,6 @@ inline int approx_distance(int dx, int dy){
 	            ( min << 7 ) - ( min << 5 ) + ( min << 3 ) - ( min << 1 )) >> 8 );
 }
 
-
 //mag minimum:0 maximum:sqrt(255*255+255*255) < 2^9
 //integer bit needs 9 + 1(sign) = 10bit
 typedef ap_fixed<18,10,AP_RND> magnitude_fixed;
@@ -306,11 +305,11 @@ void svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_
 			ap_fixed9_float ur = upperright.read();
 			ap_fixed9_float bl = bottomleft.read();
 			ap_fixed9_float br = bottomright.read();
-			loop_winx:for(int winx = 0; winx < WINDOW_NUM_W; winx++){
+			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
 #pragma HLS PIPELINE II=1
-				bool inside_window = (winx <= x && x <= winx + (WINDOW_BLOCKNUM_W - 1));
+				bool inside_window = (block_index_x <= x && x <= block_index_x + 72);
 				if(inside_window){
-					int block_index_x = x - winx;
+					int winx = x - block_index_x;
 					//block_index_y indicates where (ul,ur,bl,br) is located in the window in y axis.
 					loop_block_index_y:for(int block_index_y = 0; block_index_y < WINDOW_BLOCKNUM_H; block_index_y++){
 
