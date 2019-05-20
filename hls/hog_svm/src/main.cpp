@@ -214,7 +214,7 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 					ap_fixed_float upperright = zero;
 					ap_fixed_float bottomleft = zero;
 					ap_fixed_float bottomright = zero;
-
+#pragma HLS allocation instances=hls::sqrt limit=2
 					if(un_upperleft > eps && block_sum > eps){
 						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperleft/(block_sum + eps2);
 						upperleft = (ap_fixed_float)hls::sqrt(sqrt_target);
@@ -263,7 +263,7 @@ ap_fixed_float multiply_accum(histdata weights, ap_fixed9_float features){
 }
 void svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_fixed9_float>& upperright, hls::stream<ap_fixed9_float>& bottomleft, hls::stream<ap_fixed9_float>& bottomright,
 		hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_axis<8,1,1,1> >& ystream, hls::stream<ap_axis<8,1,1,1> >& xstream){
-	weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {
+	const weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {
 	{{{-0.27702861, 0.60882872, 0.77489772, -0.57971451, 1.1351337, -0.61708925, -0.037168136, 0.53348561, 0.65899799}, {-0.2304792, 0.15729401, -0.38586537, 1.0745021, 0.37144029, 0.26018033, -0.050108985, 0.50318494, 0.19848787}, {-0.81186583, 0.090699661, -0.69320837, 0.3581912, -0.22366082, -0.00046446369, 0.020652174, 0.066666796, 0.72009897}, {-0.11970606, 0.16936678, 0.49433372, -0.41093125, -0.25566695, 0.41232198, -0.22603478, -0.30878159, 0.5752175}},
 	{{0.025700067, 0.55524942, -0.14299036, 1.1606084, 0.65674398, 0.26819078, -0.62530728, 0.047398622, -0.1328025}, {-0.96653118, -0.99550293, 0.029158756, 0.60217548, 0.1142082, 0.15795023, 0.5264729, 0.58868957, 0.74495914}, {-0.21356984, 0.18473744, 0.78924964, -0.4198517, -0.26577343, 0.23037056, -0.22418226, -0.4438898, 0.46172914}, {-0.21188348, -0.024238361, 0.5134554, -0.023279752, 0.36486243, 0.97045258, 0.22966675, -0.098204999, 0.26555553}},
 	{{-0.86914489, -0.68238714, 0.026812079, 0.41011881, 0.057557923, 0.26800468, 0.24119578, 0.3414049, 0.6902127}, {-0.28180391, -0.55422329, 0.37444749, 0.10904583, -0.46401356, 0.49501922, -0.22026527, -0.79844701, 0.24561922}, {-0.31483978, -0.20492422, 0.38120321, -0.0136952, 0.13366862, 0.82982646, 0.19849744, -0.43043436, 0.28016748}, {0.38495892, -0.055314627, 0.37917025, -0.12441661, 0.24382124, 0.48965262, 0.31991869, -0.080944209, 0.42775918}},
@@ -291,29 +291,35 @@ void svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_
 #pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
 	ap_fixed_float PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
 #pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
+#pragma HLS RESOURCE variable=PartialSum core=RAM_2P_BRAM
+
 	for(int i = 0; i < WINDOW_BLOCKNUM_H; i++){
-		for(int j = 0; j < WINDOW_NUM_W; j++) PartialSum[i][j] = 0;
+		for(int j = 0; j < WINDOW_NUM_W; j++){
+#pragma HLS PIPELINE II=1
+			PartialSum[i][j] = 0;
+		}
 	}
 	ap_fixed_float bias = -14.786592;
-	for(int y = 0; y < BLOCK_NUM_H; y++){
-		for(int x = 0; x < BLOCK_NUM_W; x++){
+	loop_y:for(int y = 0; y < BLOCK_NUM_H; y++){
+		loop_x:for(int x = 0; x < BLOCK_NUM_W; x++){
 			ap_fixed9_float ul = upperleft.read();
 			ap_fixed9_float ur = upperright.read();
 			ap_fixed9_float bl = bottomleft.read();
 			ap_fixed9_float br = bottomright.read();
-			for(int winx = 0; winx < WINDOW_NUM_W; winx++){
+			loop_winx:for(int winx = 0; winx < WINDOW_NUM_W; winx++){
 #pragma HLS PIPELINE II=1
 				bool inside_window = (winx <= x && x <= winx + (WINDOW_BLOCKNUM_W - 1));
 				if(inside_window){
 					int block_index_x = x - winx;
-
 					//block_index_y indicates where (ul,ur,bl,br) is located in the window in y axis.
-					for(int block_index_y = 0; block_index_y < WINDOW_BLOCKNUM_H; block_index_y++){
+					loop_block_index_y:for(int block_index_y = 0; block_index_y < WINDOW_BLOCKNUM_H; block_index_y++){
+
 						int block_start_y = y - block_index_y;
 						if(0 <= block_start_y && block_start_y <= (BLOCK_NUM_H - WINDOW_BLOCKNUM_H)){
 							int partial_sum_index_y = (y - block_index_y) % WINDOW_BLOCKNUM_H;
 
 							weight w = WeightData[block_index_y][block_index_x];
+//#pragma HLS allocation instances=multiply_accum limit=2
 							ap_fixed_float tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
 									+ multiply_accum(w.bottomleft, bl) + multiply_accum(w.bottomright, br);
 							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
