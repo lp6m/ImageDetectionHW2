@@ -222,24 +222,17 @@ class WindowFinder(object):
         img_features = []
         #2) Apply color conversion if other than 'RGB'
 
-        hls = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)# convert it to HLS
+        # hls = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)# convert it to HLS
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
    
         #3) Compute spatial features if flag is set
         if self.spatial_feat == True:
-            spatial_hls = self.__bin_spatial(hls)
+            # spatial_hls = self.__bin_spatial(hls)
             spatial_rgb = self.__bin_spatial(img)
+            spatial_hsv = cv2.cvtColor(spatial_rgb, cv2.COLOR_BGR2HSV)
+            img_features.append(spatial_hsv.ravel()/255)
+            img_features.append(spatial_rgb.ravel()/255)
 
-            img_features.append(spatial_hls)
-            img_features.append(spatial_rgb)
-
-        #5) Compute histogram features if flag is set
-        if self.hist_feat == True:
-            hist_features_hls = self.__color_hist(hls)
-            hist_features_rgb = self.__color_hist(img)
-            #6) Append features to list
-            img_features.append(hist_features_hls)
-            img_features.append(hist_features_rgb)
         #7) Compute HOG features if flag is set
         if self.hog_feat == True:
 
@@ -278,7 +271,7 @@ class WindowFinder(object):
 
     # Define a function to compute binned color features  
     def __bin_spatial(self, img):
-        features = cv2.resize(img, self.spatial_size, cv2.INTER_LINEAR).ravel()
+        features = cv2.resize(img, self.spatial_size, cv2.INTER_LINEAR)
         return features
 
     # Define a function to compute color histogram features 
