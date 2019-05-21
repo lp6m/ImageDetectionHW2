@@ -12,3 +12,6 @@
 
 typedef ap_fixed<24,8,AP_RND> ap_fixed_float;
 //typedef ap_fixed<64,20,AP_RND> ap_fixed_float;
+struct bgr{
+	unsigned char b,g,r;
+};

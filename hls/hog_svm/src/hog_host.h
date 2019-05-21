@@ -1,5 +1,5 @@
 #include <vector>
-#include "consts.h"
+//#include "consts.h"
 using namespace std;
 
 //void lite_hog(cv::Mat img, double* dst, bool approx_mode, int descriptor[HISTOGRAMSIZE]);
