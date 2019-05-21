@@ -50,9 +50,15 @@ void ap_fixed_playground(){
 	cout << fixed << setprecision(10) << sqrt_rst << endl;
 	cout << fixed << setprecision(10) << sqrt_rst2 << endl;
 	cout << fixed << setprecision(10) << sqrt_rst3 << endl;
+
+	ap_fixed<32,5> c = 13.0;
+	ap_fixed<32,5> cdiv = (13.0 / 256.0);
+	ap_fixed<32,5> cdiv2 = (c >> 8);
+	cout << fixed << setprecision(10) << cdiv << endl;
+	cout << fixed << setprecision(10) << cdiv2 << endl;
 }
 int main(){
-	//ap_fixed_playground();
+	ap_fixed_playground();
 
 	cv::Mat img = cv::imread("frame.png");
 	cv::Mat frame_copy = img.clone();

@@ -132,9 +132,14 @@ struct pixweight{
 };
 
 ap_fixed_float multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
+/*#pragma HLS allocation instances=udiv limit=1 operation
 	ap_fixed_float bb = ap_fixed<64,20>(features.b / 255.0);
 	ap_fixed_float gg = ap_fixed<64,20>(features.g / 255.0);
-	ap_fixed_float rr = ap_fixed<64,20>(features.r / 255.0);
+	ap_fixed_float rr = ap_fixed<64,20>(features.r / 255.0);*/
+	//As approximation, divide by 256 instead of 255.
+	ap_fixed_float bb = features.b >> 8;
+	ap_fixed_float gg = features.g >> 8;
+	ap_fixed_float rr = features.r >> 8;
 	return weights[0] * bb + weights[1] * gg + weights[2] * rr;
 }
 void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<ap_fixed_float>& resultstream){
@@ -187,6 +192,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 			bgr bottom_bgr = bottom_scaled_in.read();
 			//h->b s->g v->r
 			bgr upper_hsv, bottom_hsv;
+//#pragma HLS allocation instances=bgr2hsv limit=1 function
 			bgr2hsv(upper_bgr.b, upper_bgr.g, upper_bgr.r, &upper_hsv.b, &upper_hsv.g, &upper_hsv.r);
 			bgr2hsv(bottom_bgr.b, bottom_bgr.g, bottom_bgr.r, &bottom_hsv.b, &bottom_hsv.g, &bottom_hsv.r);
 
@@ -200,7 +206,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 						if(0 <= cell_start_y && cell_start_y <= (IMAGE_HEIGHT / 8 - 4)){
 							int partial_sum_index_y = (y - cell_index_y) % 4;
 							pixweight w = WeightData[cell_index_y][cell_index_x];
-	//#pragma HLS allocation instances=multiply_accum limit=2
+//#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
 							ap_fixed_float tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
 									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
 							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
@@ -389,6 +395,7 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 					ap_fixed_float upperright = zero;
 					ap_fixed_float bottomleft = zero;
 					ap_fixed_float bottomright = zero;
+#pragma HLS allocation instances=udiv limit=2 operation
 #pragma HLS allocation instances=hls::sqrt limit=2
 					if(un_upperleft > eps && block_sum > eps){
 						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperleft/(block_sum + eps2);
