@@ -137,9 +137,9 @@ ap_fixed_float multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
 	ap_fixed_float gg = ap_fixed<64,20>(features.g / 255.0);
 	ap_fixed_float rr = ap_fixed<64,20>(features.r / 255.0);*/
 	//As approximation, divide by 256 instead of 255.
-	ap_fixed_float bb = features.b >> 8;
-	ap_fixed_float gg = features.g >> 8;
-	ap_fixed_float rr = features.r >> 8;
+	ap_fixed_float bb = features.b / 256.0;
+	ap_fixed_float gg = features.g / 256.0;
+	ap_fixed_float rr = features.r / 256.0;
 	return weights[0] * bb + weights[1] * gg + weights[2] * rr;
 }
 void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<ap_fixed_float>& resultstream){
