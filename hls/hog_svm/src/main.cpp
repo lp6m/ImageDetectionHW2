@@ -40,7 +40,7 @@ inline int approx_distance(int dx, int dy){
 	            ( min << 7 ) - ( min << 5 ) + ( min << 3 ) - ( min << 1 )) >> 8 );
 }
 
-void grayscale_and_resizing(hls::stream<bgr>& bgr_in, hls::stream<bgr>&upper_scaled_rgb, hls::stream<bgr>&bottom_scaled_rgb, hls::stream<ap_uint<8> >& gray_pix){
+void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream<bgr>&upper_scaled_rgb, hls::stream<bgr>&bottom_scaled_rgb, hls::stream<ap_uint<8> >& gray_pix){
 	//scaleBuffer[i][j]
 	//i indicates the kind of location in (8,8) cell
 	//  0(1,3) 1(1,4) 2(2,3) 3(2,5) 4(5,3) 5(5,4) 6(6,3)
@@ -53,7 +53,13 @@ void grayscale_and_resizing(hls::stream<bgr>& bgr_in, hls::stream<bgr>&upper_sca
 			for(int x = 0; x < IMAGE_WIDTH / 8; x++){
 				for(int xx = 0; xx < 8; xx++){
 #pragma HLS PIPELINE II=1
-					bgr pix = bgr_in.read();
+					bgr pix;
+					ap_uint<32> indata = bgr_in.read().data;
+					pix.b = (indata >> 16) & 255;
+					pix.g = (indata >> 8) & 255;
+					pix.r = (indata & 255);
+
+					//cout << (int)pix.b << " " << (int)pix.g << " " << (int)pix.r << endl;
 					unsigned char gray = ((int)(299 * (int)pix.r + 587 * (int)pix.g + 114 * (int)pix.b) / 1000);
 					gray_pix.write(gray);
 					int yy2 = yy%4;
@@ -521,7 +527,9 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 
 }
 
-void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
+//void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
+void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
+
 	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
 	hls::stream<ap_uint<8> > gray_pix;
 	hls::stream<magnitude_fixed > magstream;
@@ -531,9 +539,9 @@ void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstre
 	hls::stream<ap_fixed_float> hog_resultstream, bgr_hsv_resultstream;
 #pragma HLS INTERFACE axis port=instream
 #pragma HLS INTERFACE axis port=resultstream
-#pragma HLS INTERFACE axis port=ystream
-#pragma HLS INTERFACE axis port=xstream
-
+//#pragma HLS INTERFACE axis port=ystream
+//#pragma HLS INTERFACE axis port=xstream
+#pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
 #pragma HLS DATAFLOW
 	grayscale_and_resizing(instream, upper_scaled_rgb, bottom_scaled_rgb, gray_pix);
 	compute_mag_and_bin(gray_pix, magstream, binstream);
@@ -548,9 +556,25 @@ void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstre
 			ap_fixed_float rst1, rst2;
 			rst1 = hog_resultstream.read();
 			rst2 = bgr_hsv_resultstream.read();
-			resultstream.write(rst1 + rst2 + bias);
-			ystream.write(y);
-			xstream.write(x);
+			//conver from fixed point to floating point
+			ap_fixed_float final_rst_fixed = rst1 + rst2 + bias;
+			float final_rst_float = final_rst_fixed;
+			ap_axiu<32,1,1,1> val;
+			union{
+				int oval;
+				float ival;
+			} converter;
+			converter.ival = final_rst_float;
+			val.data = converter.oval;
+			val.last = (y == 56 && x == 72) ? 1 : 0;
+			val.strb = -1;
+			val.keep = 15;
+			val.user = 0;
+			val.id = 0;
+			val.dest = 0;
+			resultstream.write(val);
+			//ystream.write(y);
+			//xstream.write(x);
 		}
 	}
 }
