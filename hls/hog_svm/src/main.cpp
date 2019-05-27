@@ -199,6 +199,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 			//h->b s->g v->r
 			bgr upper_hsv, bottom_hsv;
 //#pragma HLS allocation instances=bgr2hsv limit=1 function
+//#pragma HLS DATAFLOW
 			bgr2hsv(upper_bgr.b, upper_bgr.g, upper_bgr.r, &upper_hsv.b, &upper_hsv.g, &upper_hsv.r);
 			bgr2hsv(bottom_bgr.b, bottom_bgr.g, bottom_bgr.r, &bottom_hsv.b, &bottom_hsv.g, &bottom_hsv.r);
 
@@ -213,6 +214,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 							int partial_sum_index_y = (y - cell_index_y) % 4;
 							pixweight w = WeightData[cell_index_y][cell_index_x];
 //#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
+//#pragma HLS DATAFLOW
 							ap_fixed_float tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
 									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
 							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
@@ -404,19 +406,31 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 #pragma HLS allocation instances=udiv limit=2 operation
 #pragma HLS allocation instances=hls::sqrt limit=2
 					if(un_upperleft > eps && block_sum > eps){
-						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperleft/(block_sum + eps2);
+						ap_fixed<64,20> epsadd = block_sum + eps2;
+						ap_fixed<64,20> sqrt_target_long = un_upperleft/ epsadd;
+						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperleft/(block_sum + eps2);
 						upperleft = (ap_fixed_float)hls::sqrt(sqrt_target);
 					}
 					if(un_upperright > eps && block_sum > eps){
-						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperright/(block_sum + eps2);
+						ap_fixed<64,20> epsadd = block_sum + eps2;
+						ap_fixed<64,20> sqrt_target_long = un_upperright/ epsadd;
+						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperright/(block_sum + eps2);
 						upperright = (ap_fixed_float)hls::sqrt(sqrt_target);
 					}
 					if(un_bottomleft > eps && block_sum > eps){
-						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomleft/(block_sum + eps2);
+						ap_fixed<64,20> epsadd = block_sum + eps2;
+						ap_fixed<64,20> sqrt_target_long = un_bottomleft/ epsadd;
+						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomleft/(block_sum + eps2);
 						bottomleft = (ap_fixed_float)hls::sqrt(sqrt_target);
 					}
 					if(un_bottomright > eps && block_sum > eps){
-						ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomright/(block_sum + eps2);
+						ap_fixed<64,20> epsadd = block_sum + eps2;
+						ap_fixed<64,20> sqrt_target_long = un_bottomright/ epsadd;
+						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomright/(block_sum + eps2);
 						bottomright = (ap_fixed_float)hls::sqrt(sqrt_target);
 					}
 					ul.data[bin_index] = upperleft;
@@ -527,32 +541,11 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 
 }
 
-//void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
-void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
-
-	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
-	hls::stream<ap_uint<8> > gray_pix;
-	hls::stream<magnitude_fixed > magstream;
-	hls::stream<ap_uint<4> > binstream;
-	hls::stream<blockpart_fixed_9 > bottom, upper;
-	hls::stream<ap_fixed9_float > ul_out, ur_out, bl_out, br_out;
-	hls::stream<ap_fixed_float> hog_resultstream, bgr_hsv_resultstream;
-#pragma HLS INTERFACE axis port=instream
-#pragma HLS INTERFACE axis port=resultstream
-//#pragma HLS INTERFACE axis port=ystream
-//#pragma HLS INTERFACE axis port=xstream
-#pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
-#pragma HLS DATAFLOW
-	grayscale_and_resizing(instream, upper_scaled_rgb, bottom_scaled_rgb, gray_pix);
-	compute_mag_and_bin(gray_pix, magstream, binstream);
-	cell_histogram_generate(magstream, binstream, bottom, upper);
-	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
-	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
-	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
-
+void merge_hog_bgrhsv(hls::stream<ap_fixed_float>& hog_resultstream, hls::stream<ap_fixed_float>& bgr_hsv_resultstream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
 	ap_fixed_float bias = -6.5475914;
 	for(int y = 0; y < 57; y++){
 		for(int x = 0; x < 73; x++){
+#pragma HLS PIPELINE II=1
 			ap_fixed_float rst1, rst2;
 			rst1 = hog_resultstream.read();
 			rst2 = bgr_hsv_resultstream.read();
@@ -577,4 +570,30 @@ void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1
 			//xstream.write(x);
 		}
 	}
+}
+
+//void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
+void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
+
+	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
+	hls::stream<ap_uint<8> > gray_pix;
+	hls::stream<magnitude_fixed > magstream;
+	hls::stream<ap_uint<4> > binstream;
+	hls::stream<blockpart_fixed_9 > bottom, upper;
+	hls::stream<ap_fixed9_float > ul_out, ur_out, bl_out, br_out;
+	hls::stream<ap_fixed_float> hog_resultstream, bgr_hsv_resultstream;
+#pragma HLS INTERFACE axis port=instream
+#pragma HLS INTERFACE axis port=resultstream
+//#pragma HLS INTERFACE axis port=ystream
+//#pragma HLS INTERFACE axis port=xstream
+#pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
+#pragma HLS DATAFLOW
+	grayscale_and_resizing(instream, upper_scaled_rgb, bottom_scaled_rgb, gray_pix);
+	compute_mag_and_bin(gray_pix, magstream, binstream);
+	cell_histogram_generate(magstream, binstream, bottom, upper);
+	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
+	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
+	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
+#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 10000 dim = 1
+	merge_hog_bgrhsv(hog_resultstream, bgr_hsv_resultstream, resultstream);
 }
