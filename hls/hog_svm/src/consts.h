@@ -10,7 +10,8 @@
 #define BLOCK_NUM_H IMAGE_HEIGHT / CELL_SIZE - 1
 
 
-typedef ap_fixed<32,10,AP_RND> ap_fixed_float;
+typedef float ap_fixed_float;
+//typedef ap_fixed<32,10,AP_RND> ap_fixed_float;
 //typedef ap_fixed<64,20,AP_RND> ap_fixed_float;
 struct bgr{
 	unsigned char b,g,r;

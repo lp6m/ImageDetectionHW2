@@ -131,25 +131,25 @@ void bgr2hsv(unsigned char bb, unsigned char gg, unsigned char rr, unsigned char
 }
 
 struct pixweight{
-	ap_fixed_float upper_hsvweight[3];
-	ap_fixed_float bottom_hsvweight[3];
-	ap_fixed_float upper_bgrweight[3];
-	ap_fixed_float bottom_bgrweight[3];
+	float upper_hsvweight[3];
+	float bottom_hsvweight[3];
+	float upper_bgrweight[3];
+	float bottom_bgrweight[3];
 };
 
-ap_fixed_float multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
+float multiply_accum_bgr(float weights[3], bgr features){
 /*#pragma HLS allocation instances=udiv limit=1 operation
-	ap_fixed_float bb = ap_fixed<64,20>(features.b / 255.0);
-	ap_fixed_float gg = ap_fixed<64,20>(features.g / 255.0);
-	ap_fixed_float rr = ap_fixed<64,20>(features.r / 255.0);*/
+	float bb = ap_fixed<64,20>(features.b / 255.0);
+	float gg = ap_fixed<64,20>(features.g / 255.0);
+	float rr = ap_fixed<64,20>(features.r / 255.0);*/
 	//As approximation, divide by 256 instead of 255.
-	ap_fixed_float bb = features.b / 256.0;
-	ap_fixed_float gg = features.g / 256.0;
-	ap_fixed_float rr = features.r / 256.0;
+	float bb = features.b / 256.0;
+	float gg = features.g / 256.0;
+	float rr = features.r / 256.0;
 	return weights[0] * bb + weights[1] * gg + weights[2] * rr;
 }
-void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<ap_fixed_float>& resultstream){
-	ap_fixed_float PartialSum[4][80 - 8 + 1];
+void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<float>& resultstream){
+	float PartialSum[4][80 - 8 + 1];
 	const pixweight WeightData[4][8] = {
 	{{{0.13471201, 0.083322162, 0.035062906}, {-0.11489125, 0.0059167839, 0.027757671}, {0.047419214, 0.038957065, 0.026170945}, {0.050302028, 0.041768948, -0.018623708}},
 	{{0.12138333, -0.021585074, 0.026402816}, {-0.093760109, 0.013729818, 0.018887553}, {0.036655084, 0.042319087, 0.032978136}, {0.023603471, 0.033578816, 0.0098683894}},
@@ -215,12 +215,12 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 							pixweight w = WeightData[cell_index_y][cell_index_x];
 //#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
 //#pragma HLS DATAFLOW
-							ap_fixed_float tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
+							float tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
 									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
 							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
 							bool window_completed = (cell_index_x == 7 && cell_index_y == 3);
 							if(window_completed){
-								ap_fixed_float allsum = PartialSum[partial_sum_index_y][winx];
+								float allsum = PartialSum[partial_sum_index_y][winx];
 								resultstream.write(allsum);
 								PartialSum[partial_sum_index_y][winx] = 0;
 							}
@@ -233,7 +233,8 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 }
 //mag minimum:0 maximum:sqrt(255*255+255*255) < 2^9
 //integer bit needs 9 + 1(sign) = 10bit
-typedef ap_fixed<18,10,AP_RND> magnitude_fixed;
+//typedef ap_fixed<18,10,AP_RND> magnitude_fixed;
+typedef float magnitude_fixed;
 
 void compute_mag_and_bin(hls::stream<ap_uint<8> >& instream, hls::stream<magnitude_fixed >& magstream, hls::stream<ap_uint<4> >& binstream){
 	//Lookup tables for tan(20)*Gx
@@ -294,12 +295,13 @@ void compute_mag_and_bin(hls::stream<ap_uint<8> >& instream, hls::stream<magnitu
 }
 
 struct ap_fixed9_float{
-	ap_fixed_float data[9];
+	float data[9];
 };
 
 //bottom,upper minimum:0 maximum:sqrt(255*255+255*255)*8*8 < 2^15
 //integer bit needs 15 + 1(sign) = 16bit
-typedef ap_fixed<24,16,AP_RND> blockpart_fixed;
+//typedef ap_fixed<24,16,AP_RND> blockpart_fixed;
+typedef float blockpart_fixed;
 //8pix * 8pix = cellsize part of block
 struct blockpart_fixed_9{
 	blockpart_fixed data[HIST_BIN_NUM];
@@ -353,7 +355,8 @@ void cell_histogram_generate(hls::stream<magnitude_fixed>& magstream, hls::strea
 
 //bottom,upper minimum:0 maximum:sqrt(255*255+255*255)*16*16 < 2^17
 //integer bit needs 17 + 1(sign) = 18bit
-typedef ap_fixed<24,18,AP_RND> blocksum_fixed;
+//typedef ap_fixed<24,18,AP_RND> blocksum_fixed;
+typedef float blocksum_fixed;
 
 inline blocksum_fixed myabs(blocksum_fixed input){
 	return ((input > 0) ? (blocksum_fixed)input : (blocksum_fixed)(-input));
@@ -396,42 +399,57 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 					blockpart_fixed un_upperright = upperfifo[bin_index].getval(1, 0);
 					blockpart_fixed un_bottomleft = bottomfifo[bin_index].getval(0, 0);
 					blockpart_fixed un_bottomright = bottomfifo[bin_index].getval(1, 0);
-					ap_fixed_float zero = 0;
-					const ap_fixed<32,2> eps = 1e-10;
-					const ap_fixed<64,20> eps2 = 1e-10;
-					ap_fixed_float upperleft = zero;
-					ap_fixed_float upperright = zero;
-					ap_fixed_float bottomleft = zero;
-					ap_fixed_float bottomright = zero;
+					float zero = 0;
+					//const ap_fixed<32,2> eps = 1e-10;
+					//const ap_fixed<64,20> eps2 = 1e-10;
+					const float eps = 1e-10;
+					const float eps2 = 1e-10;
+
+					float upperleft = zero;
+					float upperright = zero;
+					float bottomleft = zero;
+					float bottomright = zero;
 #pragma HLS allocation instances=udiv limit=2 operation
 #pragma HLS allocation instances=hls::sqrt limit=2
 					if(un_upperleft > eps && block_sum > eps){
-						ap_fixed<64,20> epsadd = block_sum + eps2;
-						ap_fixed<64,20> sqrt_target_long = un_upperleft/ epsadd;
-						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<64,20> epsadd = block_sum + eps2;
+						//ap_fixed<64,20> sqrt_target_long = un_upperleft/ epsadd;
+						//ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						float epsadd = block_sum + eps2;
+						float sqrt_target_long = un_upperleft/ epsadd;
+						float sqrt_target = sqrt_target_long;
 						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperleft/(block_sum + eps2);
-						upperleft = (ap_fixed_float)hls::sqrt(sqrt_target);
+						upperleft = (float)hls::sqrt(sqrt_target);
 					}
 					if(un_upperright > eps && block_sum > eps){
-						ap_fixed<64,20> epsadd = block_sum + eps2;
-						ap_fixed<64,20> sqrt_target_long = un_upperright/ epsadd;
-						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<64,20> epsadd = block_sum + eps2;
+						//ap_fixed<64,20> sqrt_target_long = un_upperright/ epsadd;
+						//ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						float epsadd = block_sum + eps2;
+						float sqrt_target_long = un_upperright/ epsadd;
+						float sqrt_target = sqrt_target_long;
 						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_upperright/(block_sum + eps2);
-						upperright = (ap_fixed_float)hls::sqrt(sqrt_target);
+						upperright = (float)hls::sqrt(sqrt_target);
 					}
 					if(un_bottomleft > eps && block_sum > eps){
-						ap_fixed<64,20> epsadd = block_sum + eps2;
-						ap_fixed<64,20> sqrt_target_long = un_bottomleft/ epsadd;
-						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<64,20> epsadd = block_sum + eps2;
+						//ap_fixed<64,20> sqrt_target_long = un_bottomleft/ epsadd;
+						//ap_fixed<32,2> sqrt_target = sqrt_target_long;
 						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomleft/(block_sum + eps2);
-						bottomleft = (ap_fixed_float)hls::sqrt(sqrt_target);
+						float epsadd = block_sum + eps2;
+						float sqrt_target_long = un_bottomleft/ epsadd;
+						float sqrt_target = sqrt_target_long;
+						bottomleft = (float)hls::sqrt(sqrt_target);
 					}
 					if(un_bottomright > eps && block_sum > eps){
-						ap_fixed<64,20> epsadd = block_sum + eps2;
-						ap_fixed<64,20> sqrt_target_long = un_bottomright/ epsadd;
-						ap_fixed<32,2> sqrt_target = sqrt_target_long;
+						//ap_fixed<64,20> epsadd = block_sum + eps2;
+						//ap_fixed<64,20> sqrt_target_long = un_bottomright/ epsadd;
+						//ap_fixed<32,2> sqrt_target = sqrt_target_long;
 						//ap_fixed<32,2> sqrt_target = (ap_fixed<64,20>)un_bottomright/(block_sum + eps2);
-						bottomright = (ap_fixed_float)hls::sqrt(sqrt_target);
+						float epsadd = block_sum + eps2;
+						float sqrt_target_long = un_bottomright/ epsadd;
+						float sqrt_target = sqrt_target_long;
+						bottomright = (float)hls::sqrt(sqrt_target);
 					}
 					ul.data[bin_index] = upperleft;
 					ur.data[bin_index] = upperright;
@@ -449,7 +467,7 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 	}
 }
 struct histdata{
-	ap_fixed_float data[9];
+	float data[9];
 };
 struct weight{
 	histdata upperleft;
@@ -458,13 +476,13 @@ struct weight{
 	histdata bottomright;
 };
 
-ap_fixed_float multiply_accum(histdata weights, ap_fixed9_float features){
+float multiply_accum(histdata weights, ap_fixed9_float features){
 	return weights.data[0] * features.data[0] + weights.data[1] * features.data[1] + weights.data[2] * features.data[2]
 			+ weights.data[3] * features.data[3] + weights.data[4] * features.data[4] + weights.data[5] * features.data[5]
 			+ weights.data[6] * features.data[6] + weights.data[7] * features.data[7] + weights.data[8] * features.data[8];
 }
 void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_fixed9_float>& upperright, hls::stream<ap_fixed9_float>& bottomleft, hls::stream<ap_fixed9_float>& bottomright,
-		hls::stream<ap_fixed_float>& resultstream){
+		hls::stream<float>& resultstream){
 	const weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {
 	{{{-0.11592449, 0.1182964, 0.2061952, -0.094230117, 0.18011853, -0.24861195, -0.31082461, -0.066229289, 0.14555717}, {-0.12177213, 0.1570581, -0.032505462, 0.20021335, 0.1206582, 0.054348659, -0.18054019, 0.099335802, 0.12794927}, {0.011623583, 0.11882419, 0.13402278, 0.076370048, -0.037424818, -0.031787151, 0.05145738, -0.002697307, 0.20921361}, {-0.11073844, 0.01213981, 0.19430859, -0.071810858, 0.0053566204, 0.065097385, -0.019606471, -0.043234665, 0.069365788}},
 	{{-0.033270435, 0.19400932, 0.017387759, 0.22618451, 0.15820455, 0.057495381, -0.22403611, 0.104304, 0.10486948}, {-0.20971139, -0.32212354, 0.04168051, -0.067712064, -0.091495479, -0.080738092, 0.22655086, 0.17898326, 0.22516093}, {-0.033750991, 0.09249765, 0.28777511, -0.082558502, 0.050255984, 0.0064472982, -0.012990965, -0.025119048, 0.10155549}, {-0.053426633, -0.0043009026, 0.032369867, -0.07787733, 0.1385036, 0.22776495, 0.22142897, -0.03234516, 0.084754989}},
@@ -490,7 +508,7 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 	};
 #pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
 #pragma HLS RESOURCE variable=WeightData core=ROM_1P_BRAM
-	ap_fixed_float PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
+	float PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
 #pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
 #pragma HLS RESOURCE variable=PartialSum core=RAM_2P_BRAM
 
@@ -519,13 +537,13 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 
 							weight w = WeightData[block_index_y][block_index_x];
 //#pragma HLS allocation instances=multiply_accum limit=2
-							ap_fixed_float tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
+							float tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
 									+ multiply_accum(w.bottomleft, bl) + multiply_accum(w.bottomright, br);
 							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
 
 							bool window_completed = (block_index_x == (WINDOW_BLOCKNUM_W - 1) && block_index_y == (WINDOW_BLOCKNUM_H - 1));
 							if(window_completed){
-								ap_fixed_float allsum = PartialSum[partial_sum_index_y][winx];
+								float allsum = PartialSum[partial_sum_index_y][winx];
 								PartialSum[partial_sum_index_y][winx] = 0;
 								//ap_axis<8,1,1,1> ap_y, ap_x;
 								//ap_y.data = block_start_y;
@@ -541,16 +559,16 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 
 }
 
-void merge_hog_bgrhsv(hls::stream<ap_fixed_float>& hog_resultstream, hls::stream<ap_fixed_float>& bgr_hsv_resultstream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
-	ap_fixed_float bias = -6.5475914;
+void merge_hog_bgrhsv(hls::stream<float>& hog_resultstream, hls::stream<float>& bgr_hsv_resultstream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
+	float bias = -6.5475914;
 	for(int y = 0; y < 57; y++){
 		for(int x = 0; x < 73; x++){
 #pragma HLS PIPELINE II=1
-			ap_fixed_float rst1, rst2;
+			float rst1, rst2;
 			rst1 = hog_resultstream.read();
 			rst2 = bgr_hsv_resultstream.read();
 			//conver from fixed point to floating point
-			ap_fixed_float final_rst_fixed = rst1 + rst2 + bias;
+			float final_rst_fixed = rst1 + rst2 + bias;
 			float final_rst_float = final_rst_fixed;
 			ap_axiu<32,1,1,1> val;
 			union{
@@ -572,7 +590,7 @@ void merge_hog_bgrhsv(hls::stream<ap_fixed_float>& hog_resultstream, hls::stream
 	}
 }
 
-//void hog_svm(hls::stream<bgr>& instream, hls::stream<ap_fixed_float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
+//void hog_svm(hls::stream<bgr>& instream, hls::stream<float>& resultstream, hls::stream<ap_int<8> >& ystream, hls::stream<ap_int<8> >& xstream){
 void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& resultstream){
 
 	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
@@ -581,7 +599,7 @@ void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1
 	hls::stream<ap_uint<4> > binstream;
 	hls::stream<blockpart_fixed_9 > bottom, upper;
 	hls::stream<ap_fixed9_float > ul_out, ur_out, bl_out, br_out;
-	hls::stream<ap_fixed_float> hog_resultstream, bgr_hsv_resultstream;
+	hls::stream<float> hog_resultstream, bgr_hsv_resultstream;
 #pragma HLS INTERFACE axis port=instream
 #pragma HLS INTERFACE axis port=resultstream
 //#pragma HLS INTERFACE axis port=ystream
@@ -594,6 +612,6 @@ void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
 	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
 	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
-#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 10000 dim = 1
+#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 20000 dim = 1
 	merge_hog_bgrhsv(hog_resultstream, bgr_hsv_resultstream, resultstream);
 }

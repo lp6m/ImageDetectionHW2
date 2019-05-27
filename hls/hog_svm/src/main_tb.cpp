@@ -59,7 +59,7 @@ void ap_fixed_playground(){
 	cout << fixed << setprecision(10) << cdiv2 << endl;
 }
 int main(){
-	ap_fixed_playground();
+	//ap_fixed_playground();
 
 	cv::Mat img = cv::imread("frame.png");
 	cv::Mat frame_copy = img.clone();
