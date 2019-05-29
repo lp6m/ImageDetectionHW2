@@ -246,13 +246,14 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 //#pragma HLS DATAFLOW
 							accum_fixed tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
 									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
-							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
+							if(cell_index_x == 0 && cell_index_y == 0) PartialSum[partial_sum_index_y][winx] = tmp_partial_sum;
+							else PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
 							bool window_completed = (cell_index_x == 7 && cell_index_y == 3);
 							if(window_completed){
 								accum_fixed allsum = PartialSum[partial_sum_index_y][winx];
 								bgr_hsv_result[rstcnt++] = allsum;
 								//resultstream.write(allsum);
-								PartialSum[partial_sum_index_y][winx] = 0;
+								//PartialSum[partial_sum_index_y][winx] = 0;
 							}
 						}
 					}
