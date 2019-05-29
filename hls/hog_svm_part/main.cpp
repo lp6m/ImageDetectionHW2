@@ -15,6 +15,7 @@
 //ypedef float ap_fixed_float;
 //#define AP_FIXED_INT_WIDTH 10
 typedef ap_fixed<32, 10> ap_fixed_float;
+typedef ap_fixed<64, 20> accum_fixed;
 //typedef ap_fixed<64,20,AP_RND> ap_fixed_float;
 struct bgr{
 	unsigned char b,g,r;
@@ -52,7 +53,7 @@ inline int approx_distance(int dx, int dy){
 	            ( min << 7 ) - ( min << 5 ) + ( min << 3 ) - ( min << 1 )) >> 8 );
 }
 
-void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream<ap_uint<8> >& gray_pix){
+void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream<ap_uint<8> >& gray_pix, hls::stream<bgr>& upper_scaled_rgb, hls::stream<bgr>& bottom_scaled_rgb){
 	//scaleBuffer[i][j]
 	//i indicates the kind of location in (8,8) cell
 	//  0(1,3) 1(1,4) 2(2,3) 3(2,5) 4(5,3) 5(5,4) 6(6,3)
@@ -100,8 +101,8 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 							b_rst.b = u_bsum / 4 + (((u_bsum % 2) > 0) ? 1 : 0);
 							b_rst.g = u_gsum / 4 + (((u_gsum % 2) > 0) ? 1 : 0);
 							b_rst.r = u_rsum / 4 + (((u_rsum % 2) > 0) ? 1 : 0);
-							//upper_scaled_rgb.write(u_rst);
-							//bottom_scaled_rgb.write(b_rst);
+							upper_scaled_rgb.write(u_rst);
+							bottom_scaled_rgb.write(b_rst);
 							//cout << y << " " << x << " " << u_rst.b << " " << b_rst.b << endl;
 						}else{
 							int bufindex = 4 * (yy / 4) + 2 * (yy2 / 2) + (xx - 3);
@@ -115,6 +116,151 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 	}
 }
 
+void bgr2hsv(unsigned char bb, unsigned char gg, unsigned char rr, unsigned char* h, unsigned char* s, unsigned char* v){
+	int b = (int)bb;
+	int g = (int)gg;
+	int r = (int)rr;
+	int pix0_max = max(max(b, g), r);
+	int pix0_min = min(min(b, g), r);
+	int pix0_V = pix0_max;
+	int pix0_S;
+	int pix0_2H;
+	if(pix0_max == pix0_min){
+		pix0_2H = 0;
+		pix0_S = 0;
+	}else{
+		if(pix0_max == r) pix0_2H = 60 * (g - b) / (pix0_V - pix0_min);
+		else if(pix0_max == g) pix0_2H = 60 * (b - r) / (pix0_V - pix0_min) + 120;
+		else pix0_2H = 60 * (r - g) / (pix0_V - pix0_min) + 240;
+
+		if(pix0_2H > 360) pix0_2H = pix0_2H - 360;
+		else if(pix0_2H  < 0) pix0_2H = pix0_2H + 360;
+
+		pix0_S = (pix0_max - pix0_min) * 255 / pix0_max;
+	}
+	*h = ((unsigned char)(pix0_2H / 2));
+	*s = (unsigned char)pix0_S;
+	*v = (unsigned char)pix0_V;
+}
+
+struct pixweight{
+	ap_fixed_float upper_hsvweight[3];
+	ap_fixed_float bottom_hsvweight[3];
+	ap_fixed_float upper_bgrweight[3];
+	ap_fixed_float bottom_bgrweight[3];
+};
+accum_fixed multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
+/*#pragma HLS allocation instances=udiv limit=1 operation*/
+	//As approximation, divide by 256 instead of 255.
+	ap_uint<64> bb = features.b;
+	ap_uint<64> gg = features.g;
+	ap_uint<64> rr = features.r;
+	ap_fixed_float b_fixed = 0;
+	ap_fixed_float g_fixed = 0;
+	ap_fixed_float r_fixed = 0;
+	b_fixed.range(21,14) = bb.range(7, 0);
+	g_fixed.range(21,14) = gg.range(7, 0);
+	r_fixed.range(21,14) = rr.range(7, 0);
+#pragma HLS allocation instances=mul limit=2
+	return (accum_fixed)weights[0] * (accum_fixed)b_fixed + (accum_fixed)weights[1] * (accum_fixed)g_fixed + (accum_fixed)weights[2] * (accum_fixed)r_fixed;
+}
+
+accum_fixed bgr_hsv_result[4661];
+
+void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in){
+	const pixweight WeightData[4][8] = {
+	{{{0.020371287, 0.11754206, 0.052620558}, {0.048162602, 0.016815955, 0.0038571072}, {0.071730293, 0.065275003, 0.028889994}, {0.038901613, 0.0092229031, -0.028825374}},
+	{{-0.089498951, 0.076741773, 0.075615231}, {0.16883909, 0.13240662, 0.019985014}, {0.059390586, 0.096840426, 0.092502714}, {0.029971676, 0.030376268, -0.026852187}},
+	{{-0.018182268, -0.10030023, -0.11182791}, {-0.035702248, -0.10735345, -0.022564083}, {-0.10341782, -0.044062326, -0.052889815}, {0.013626721, -0.0042592695, -0.01899933}},
+	{{-0.070917636, -0.070040604, -0.031416891}, {0.046079124, -0.11573138, -0.072439377}, {0.000101127, 0.0041335958, 0.041936163}, {-0.045337642, -0.081155537, -0.086017663}},
+	{{0.31268987, -0.22161892, -0.11092621}, {0.092340299, -0.17459179, 0.050251555}, {-0.028027051, -0.028213295, -0.048870753}, {0.082514529, 0.052879155, 0.088748174}},
+	{{0.26988158, 0.050662917, 0.013448453}, {-0.060604493, 0.036853602, 0.11274863}, {0.011320314, -0.019154544, 0.036684715}, {0.021456144, -0.0062324432, 0.17946469}},
+	{{-0.026537339, -0.047144313, -0.02768047}, {-0.1237802, 0.27853941, 0.12615391}, {-0.066858783, -0.065760586, -0.020650061}, {-0.23890913, -0.23104086, 0.17132315}},
+	{{-0.11053537, -0.032296846, -0.034950713}, {0.14434386, -0.005433003, 0.038525037}, {-0.055892395, -0.051928245, -0.040986292}, {-0.10243054, -0.13746209, 0.078968399}}}
+	,
+	{{{-0.10898625, 0.071634918, -0.029992231}, {-0.0053820727, 0.040743582, -0.042088092}, {-0.042829335, -0.040088393, -0.016294744}, {-0.076042711, -0.074801553, -0.015516881}},
+	{{0.017519718, -0.27485937, -0.064405945}, {0.13548549, -0.35072745, -0.13058319}, {-0.057400295, -0.06095545, 0.081317958}, {-0.099203007, -0.11901927, 0.11115792}},
+	{{-0.28023093, -0.16957001, 0.068558575}, {-0.23882319, -0.41990275, -0.041296008}, {-0.0063692765, 0.037837402, 0.14689748}, {-0.032404171, -0.042706346, 0.17808126}},
+	{{0.1336384, -0.15564492, 0.024031315}, {-0.0046813673, -0.22746681, 0.12040746}, {0.019779467, -0.055303676, 0.047804219}, {0.12693606, -0.031140441, 0.19911166}},
+	{{0.15402029, -0.059604621, -0.01972509}, {0.049276836, -0.088246575, -0.063674764}, {-0.1401801, -0.25512646, 0.063201893}, {-0.038890699, -0.36958643, -0.0022525514}},
+	{{-0.14909845, -0.10986489, 0.088270913}, {-0.06782847, -0.090653813, 0.19508839}, {-0.020386143, -0.056992613, 0.20255332}, {0.028004038, -0.027865895, 0.31429582}},
+	{{-0.21247009, 0.22126779, 0.22551715}, {-0.182488, 0.33588085, 0.35821497}, {-0.1392855, -0.16630134, 0.28910273}, {-0.034709853, -0.0090028481, 0.43609151}},
+	{{-0.055420982, 0.078221327, 0.05364981}, {0.089923835, 0.13620772, 0.067854636}, {-0.08955006, -0.12499049, 0.060785142}, {-0.14470767, -0.13994718, 0.11232396}}}
+	,
+	{{{0.0013239678, 0.055428806, -0.082635795}, {-0.0022864108, 0.11964768, 0.089203251}, {-0.077817534, -0.10342703, -0.073800935}, {0.10595673, 0.03043694, 0.067686307}},
+	{{-0.14079345, -0.20681809, -0.081689524}, {0.073497492, -0.13241872, -0.1133071}, {-0.078411984, -0.093166841, 0.085428721}, {-0.077906801, -0.072230316, -0.048655656}},
+	{{0.046048192, -0.23297896, -0.18809364}, {-0.092131011, -0.14063722, -0.10003229}, {-0.14031869, -0.23507535, -0.026911787}, {-0.071456403, -0.14701655, -0.054165025}},
+	{{0.16404433, -0.17801143, 0.069624105}, {0.19188991, -0.037026479, -0.041774378}, {0.14016975, -0.056543752, 0.085056077}, {-0.0099750322, -0.22112571, -0.074386097}},
+	{{0.077273519, -0.084951963, 0.098354623}, {0.071026204, 0.07886672, 0.060001722}, {0.023768544, -0.35530938, 0.12471573}, {-0.22384476, -0.51996968, 0.061906871}},
+	{{0.060351168, -0.14079133, 0.18709987}, {-0.048486703, -0.02170411, 0.081485848}, {0.10663695, -0.022133559, 0.25735073}, {-0.1034866, -0.21921642, 0.11522512}},
+	{{-0.099991538, 0.28472686, 0.32885018}, {0.15917123, 0.016225102, 0.22883522}, {0.029644417, 0.039079195, 0.39522995}, {0.071990856, 0.0034405584, 0.26425154}},
+	{{-0.13240705, 0.10894868, 0.075737005}, {0.19224053, -0.086145875, -0.0094230694}, {-0.11340512, -0.17253377, 0.12304173}, {-0.049533709, -0.11990684, 0.025364579}}}
+	,
+	{{{0.014678718, 0.14280875, -0.033435076}, {0.16255002, -0.021581039, 0.097843459}, {-0.023842296, -0.081018992, -0.04608475}, {0.12125819, 0.083366695, 0.05939952}},
+	{{-0.016093116, -0.10314063, -0.0056518201}, {0.24508968, -0.080563156, 0.052207287}, {0.073650219, -0.0085824543, -0.037905219}, {0.11461151, 0.060213669, -0.0056508531}},
+	{{0.027626555, -0.090248633, 0.006389358}, {0.10143696, 0.015023398, 0.050473112}, {0.098815972, -0.0029400005, -0.038300807}, {0.12029697, 0.085480937, -0.037544015}},
+	{{0.011329069, -0.0006998653, 0.095261521}, {0.11940634, 0.071801385, 0.0077632778}, {0.12782293, 0.054844184, -0.018921885}, {0.040403021, 0.00074267527, -0.063218363}},
+	{{0.0316921, 0.096954359, 0.21035329}, {0.35093432, -0.045245094, 0.056426753}, {0.079929289, -0.034457723, 0.096275703}, {0.021939321, -0.096427054, -0.020224142}},
+	{{0.19797268, 0.062644908, 0.089984598}, {0.30734046, 0.0099592396, 0.072560425}, {-0.14946462, -0.25150766, 0.065191361}, {-0.071131307, -0.19794033, 0.039840833}},
+	{{0.043288449, 0.090454614, 0.13972389}, {0.11814476, 0.064859977, 0.068014676}, {-0.012816126, -0.09050149, 0.11790795}, {-0.033003706, -0.13534811, -0.0011606731}},
+	{{0.28397242, -0.040270352, -0.021484664}, {0.33941849, -0.14723122, -0.035179396}, {-0.035080773, -0.14034925, -0.036054036}, {0.022488399, -0.013106878, -0.072457735}}}
+
+	};
+	accum_fixed PartialSum[4][80 - 8 + 1];
+#pragma HLS RESOURCE variable=WeightData core=ROM_1P_BRAM
+#pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
+#pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
+#pragma HLS RESOURCE variable=PartialSum[0] core=RAM_2P_BRAM
+#pragma HLS RESOURCE variable=PartialSum[1] core=RAM_2P_BRAM
+#pragma HLS RESOURCE variable=PartialSum[2] core=RAM_2P_BRAM
+#pragma HLS RESOURCE variable=PartialSum[3] core=RAM_2P_BRAM
+	for(int i = 0; i < 4; i++){
+		for(int j = 0; j < 73; j++){
+#pragma HLS PIPELINE II = 1
+			PartialSum[i][j] = 0;
+		}
+	}
+	int rstcnt = 0;
+	for(int y = 0; y < IMAGE_HEIGHT / 8; y++){
+		for(int x = 0; x < IMAGE_WIDTH / 8; x++){
+			bgr upper_bgr = upper_scaled_in.read();
+			bgr bottom_bgr = bottom_scaled_in.read();
+			//h->b s->g v->r
+			bgr upper_hsv, bottom_hsv;
+//#pragma HLS allocation instances=bgr2hsv limit=1 function
+//#pragma HLS DATAFLOW
+			bgr2hsv(upper_bgr.b, upper_bgr.g, upper_bgr.r, &upper_hsv.b, &upper_hsv.g, &upper_hsv.r);
+			bgr2hsv(bottom_bgr.b, bottom_bgr.g, bottom_bgr.r, &bottom_hsv.b, &bottom_hsv.g, &bottom_hsv.r);
+
+			for(int cell_index_x = 7; cell_index_x >= 0; cell_index_x--){
+#pragma HLS PIPELINE II=1
+				int winx = x - cell_index_x;
+				bool inside_window = (cell_index_x <= x && x <= cell_index_x + 72);
+				if(inside_window){
+					for(int cell_index_y = 0; cell_index_y < 4; cell_index_y++){
+						int cell_start_y = y - cell_index_y;
+						if(0 <= cell_start_y && cell_start_y <= (IMAGE_HEIGHT / 8 - 4)){
+							int partial_sum_index_y = (y - cell_index_y) % 4;
+							pixweight w = WeightData[cell_index_y][cell_index_x];
+//#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
+//#pragma HLS DATAFLOW
+							accum_fixed tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
+									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
+							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
+							bool window_completed = (cell_index_x == 7 && cell_index_y == 3);
+							if(window_completed){
+								accum_fixed allsum = PartialSum[partial_sum_index_y][winx];
+								bgr_hsv_result[rstcnt++] = allsum;
+								//resultstream.write(allsum);
+								PartialSum[partial_sum_index_y][winx] = 0;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
 //mag minimum:0 maximum:sqrt(255*255+255*255) < 2^9
 //integer bit needs 9 + 1(sign) = 10bit
 //typedef ap_fixed<18,10,AP_RND> magnitude_fixed;
@@ -331,7 +477,7 @@ struct weight{
 	histdata bottomright;
 };
 
-typedef ap_fixed<64, 20> accum_fixed;
+
 accum_fixed multiply_accum(histdata weights, ap_fixed9_float features){
 	accum_fixed rst = 0;
 	for(int i = 0; i < 9; i++){
@@ -463,7 +609,7 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 
 void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream){
 
-	//hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
+	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
 	hls::stream<ap_uint<8> > gray_pix;
 	hls::stream<magnitude_fixed > magstream;
 	hls::stream<int> binstream;
@@ -474,16 +620,20 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 #pragma HLS INTERFACE axis port=outstream
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
 #pragma HLS DATAFLOW
-	grayscale_and_resizing(instream, gray_pix);
+	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
 	compute_mag_and_bin(gray_pix, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom, upper);
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
 	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
+	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb);
 	int outputnum = 4161;
+	accum_fixed bias = -1.7700042;
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
-		float final_rst_float = hog.to_float();
-		cout << fixed << setprecision(10) << final_rst_float << endl;
+		accum_fixed bgr_hsv = bgr_hsv_result[i];
+		accum_fixed bined = hog + bgr_hsv + bias;
+		float final_rst_float = bined.to_float();
+		//cout << fixed << setprecision(10) << final_rst_float << endl;
 		ap_axiu<32,1,1,1> val;
 		union{
 			int oval;
