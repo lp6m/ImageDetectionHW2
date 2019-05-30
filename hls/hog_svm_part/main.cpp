@@ -223,6 +223,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 	int rstcnt = 0;
 	for(int y = 0; y < IMAGE_HEIGHT / 8; y++){
 		for(int x = 0; x < IMAGE_WIDTH / 8; x++){
+#pragma HLS PIPELINE II=1
 			bgr upper_bgr = upper_scaled_in.read();
 			bgr bottom_bgr = bottom_scaled_in.read();
 			//h->b s->g v->r
@@ -233,7 +234,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 			bgr2hsv(bottom_bgr.b, bottom_bgr.g, bottom_bgr.r, &bottom_hsv.b, &bottom_hsv.g, &bottom_hsv.r);
 
 			for(int cell_index_x = 7; cell_index_x >= 0; cell_index_x--){
-#pragma HLS PIPELINE II=1
+//#pragma HLS PIPELINE II=1
 				int winx = x - cell_index_x;
 				bool inside_window = (cell_index_x <= x && x <= cell_index_x + 72);
 				if(inside_window){
@@ -242,7 +243,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 						if(0 <= cell_start_y && cell_start_y <= (IMAGE_HEIGHT / 8 - 4)){
 							int partial_sum_index_y = (y - cell_index_y) % 4;
 							pixweight w = WeightData[cell_index_y][cell_index_x];
-//#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
+#pragma HLS allocation instances=multiply_accum_bgr limit=2 function
 //#pragma HLS DATAFLOW
 							accum_fixed tmp_partial_sum = multiply_accum_bgr(w.upper_bgrweight, upper_bgr) + multiply_accum_bgr(w.bottom_bgrweight, bottom_bgr)
 									+ multiply_accum_bgr(w.upper_hsvweight, upper_hsv) + multiply_accum_bgr(w.bottom_hsvweight, bottom_hsv);
@@ -446,7 +447,7 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 					blockpart_fixed un_upperright = upperfifo[bin_index].getval(1, 0);
 					blockpart_fixed un_bottomleft = bottomfifo[bin_index].getval(0, 0);
 					blockpart_fixed un_bottomright = bottomfifo[bin_index].getval(1, 0);
-//#pragma HLS allocation instances=udiv limit=2 operation
+#pragma HLS allocation instances=div_int_to_ap_fixed limit=2 operation
 					ap_fixed_float upperleft = div_int_to_ap_fixed(un_upperleft, block_sum);
 					ap_fixed_float upperright = div_int_to_ap_fixed(un_upperright, block_sum);
 					ap_fixed_float bottomleft = div_int_to_ap_fixed(un_bottomleft, block_sum);
@@ -572,8 +573,9 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 			ap_fixed9_float ur = upperright.read();
 			ap_fixed9_float bl = bottomleft.read();
 			ap_fixed9_float br = bottomright.read();
-			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
 #pragma HLS PIPELINE II=1
+			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
+//#pragma HLS PIPELINE II=1
 				bool inside_window = (block_index_x <= x && x <= block_index_x + 72);
 				if(inside_window){
 					int winx = x - block_index_x;
@@ -584,15 +586,16 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 							int partial_sum_index_y = (y - block_index_y) % WINDOW_BLOCKNUM_H;
 
 							weight w = WeightData[block_index_y][block_index_x];
-//#pragma HLS allocation instances=multiply_accum limit=2
+#pragma HLS allocation instances=multiply_accum limit=1
 							accum_fixed tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
 									+ multiply_accum(w.bottomleft, bl) + multiply_accum(w.bottomright, br);
-							PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
+							if(block_index_y == 0 && block_index_x == 0) PartialSum[partial_sum_index_y][winx] = tmp_partial_sum;
+							else PartialSum[partial_sum_index_y][winx] += tmp_partial_sum;
 
 							bool window_completed = (block_index_x == (WINDOW_BLOCKNUM_W - 1) && block_index_y == (WINDOW_BLOCKNUM_H - 1));
 							if(window_completed){
 								accum_fixed allsum = PartialSum[partial_sum_index_y][winx];
-								PartialSum[partial_sum_index_y][winx] = 0;
+								//PartialSum[partial_sum_index_y][winx] = 0;
 								//ap_axis<8,1,1,1> ap_y, ap_x;
 								//ap_y.data = block_start_y;
 								//ap_x.data = winx;
