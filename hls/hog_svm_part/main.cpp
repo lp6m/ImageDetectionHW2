@@ -625,7 +625,7 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 #pragma HLS INTERFACE axis port=outstream
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
 #pragma HLS DATAFLOW
-#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 4200 dim = 1
+#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 500 dim = 1
 	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
 	compute_mag_and_bin(gray_pix, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom, upper);
