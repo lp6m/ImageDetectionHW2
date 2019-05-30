@@ -87,7 +87,14 @@ int main(){
 	double thresh = 0.70;
 	hog_svm_part(instream, resultstream);
 	while(!resultstream.empty()){
-		resultstream.read();
+		ap_uint<32> data = resultstream.read().data;
+				union{
+					int ival;
+					float oval;
+				}converter;
+				converter.ival = data;
+				float rst = converter.oval;
+				cout << fixed << setprecision(10) << rst << endl;
 	}
 
 	bool err = false;
