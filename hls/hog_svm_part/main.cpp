@@ -1,12 +1,13 @@
+#include "/opt/Xilinx/Vivado/2018.2/include/gmp.h"
 #include "hls_video.h"
 #include <iostream>
 #include <string.h>
 #include <hls_stream.h>
-#include <hls_math.h>
 #include <ap_axi_sdata.h>
 #include <ap_fixed.h>
 #include <iostream>
 #include <iomanip>
+
 //#include "consts.h"
 
 #define BLOCK_NUM_H IMAGE_HEIGHT / CELL_SIZE - 1

@@ -1,3 +1,4 @@
+#include "/opt/Xilinx/Vivado/2018.2/include/gmp.h"
 #include <iostream>
 #include <cmath>
 #include <string.h>
@@ -6,8 +7,6 @@
 #include <ap_axi_sdata.h>
 #include <opencv2/opencv.hpp>
 #include <hls_stream.h>
-#include <hls_video.h>
-#include <hls_math.h>
 
 #include <sstream>
 
@@ -31,22 +30,6 @@ void ap_fixed_playground(){
 	ap_fixed<64,20> bb = 65536;
 
 	const ap_fixed<64,20> eps2 = 1e-10;
-
-	ap_fixed<32,2> sqrt_target = a/b;
-	ap_fixed<32,2> sqrt_target2 = aa/bb;
-	ap_fixed<32,2> sqrt_target3 = (ap_fixed<64,20>)a/(b+eps2);
-	cout << fixed << setprecision(10) << sqrt_target << endl;
-	cout << fixed << setprecision(10) << sqrt_target2 << endl;
-	cout << fixed << setprecision(10) << sqrt_target3 << endl;
-
-	ap_fixed<32,2> sqrt_rst = hls::sqrt(sqrt_target);
-	ap_fixed<32,2> sqrt_rst2 = hls::sqrt(sqrt_target2);
-	ap_fixed<32,2> sqrt_rst3 = hls::sqrt(sqrt_target3);
-	//ap_fixed<24,2,AP_RND> sqrt_rst2 = sqrt((ap_fixed<24,20,AP_RND>)a/b);
-	//ap_fixed<32,1,AP_RND> sqrt_rst2 = sqrt(a/c);
-	cout << fixed << setprecision(10) << sqrt_rst << endl;
-	cout << fixed << setprecision(10) << sqrt_rst2 << endl;
-	cout << fixed << setprecision(10) << sqrt_rst3 << endl;
 
 	ap_fixed<32,5> c = 13.0;
 	ap_fixed<32,5> cdiv = (13.0 / 256.0);
