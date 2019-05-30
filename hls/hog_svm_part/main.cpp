@@ -165,9 +165,9 @@ accum_fixed multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
 	return (accum_fixed)weights[0] * (accum_fixed)b_fixed + (accum_fixed)weights[1] * (accum_fixed)g_fixed + (accum_fixed)weights[2] * (accum_fixed)r_fixed;
 }
 
-accum_fixed bgr_hsv_result[4661];
+//accum_fixed bgr_hsv_result[4661];
 
-void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in){
+void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<accum_fixed>& resultstream){
 	const pixweight WeightData[4][8] = {
 	{{{0.020371287, 0.11754206, 0.052620558}, {0.048162602, 0.016815955, 0.0038571072}, {0.071730293, 0.065275003, 0.028889994}, {0.038901613, 0.0092229031, -0.028825374}},
 	{{-0.089498951, 0.076741773, 0.075615231}, {0.16883909, 0.13240662, 0.019985014}, {0.059390586, 0.096840426, 0.092502714}, {0.029971676, 0.030376268, -0.026852187}},
@@ -252,8 +252,8 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 							bool window_completed = (cell_index_x == 7 && cell_index_y == 3);
 							if(window_completed){
 								accum_fixed allsum = PartialSum[partial_sum_index_y][winx];
-								bgr_hsv_result[rstcnt++] = allsum;
-								//resultstream.write(allsum);
+								//bgr_hsv_result[rstcnt++] = allsum;
+								resultstream.write(allsum);
 								//PartialSum[partial_sum_index_y][winx] = 0;
 							}
 						}
@@ -624,19 +624,21 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 #pragma HLS INTERFACE axis port=outstream
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
 #pragma HLS DATAFLOW
+#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 5000 dim = 1
 	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
 	compute_mag_and_bin(gray_pix, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom, upper);
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
 	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
-	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb);
+	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
 	int outputnum = 4161;
 	accum_fixed bias = -1.7700042;
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
-		accum_fixed bgr_hsv = bgr_hsv_result[i];
+		accum_fixed bgr_hsv = bgr_hsv_resultstream.read();//bgr_hsv_result[i];
 		accum_fixed bined = hog + bgr_hsv + bias;
 		float final_rst_float = bined.to_float();
+		//float final_rst_float = bgr_hsv.to_float();
 		//cout << fixed << setprecision(10) << final_rst_float << endl;
 		ap_axiu<32,1,1,1> val;
 		union{
