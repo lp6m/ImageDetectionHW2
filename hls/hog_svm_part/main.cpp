@@ -54,7 +54,7 @@ inline int approx_distance(int dx, int dy){
 	            ( min << 7 ) - ( min << 5 ) + ( min << 3 ) - ( min << 1 )) >> 8 );
 }
 
-void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream<ap_uint<8> >& gray_pix, hls::stream<bgr>& upper_scaled_rgb, hls::stream<bgr>& bottom_scaled_rgb){
+void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream<ap_uint<8> >& gray_pix){//, hls::stream<bgr>& upper_scaled_rgb, hls::stream<bgr>& bottom_scaled_rgb){
 	//scaleBuffer[i][j]
 	//i indicates the kind of location in (8,8) cell
 	//  0(1,3) 1(1,4) 2(2,3) 3(2,5) 4(5,3) 5(5,4) 6(6,3)
@@ -75,7 +75,7 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 
 					//cout << (int)pix.b << " " << (int)pix.g << " " << (int)pix.r << endl;
 					unsigned char gray = ((int)(299 * (int)pix.r + 587 * (int)pix.g + 114 * (int)pix.b) / 1000);
-					gray_pix.write(gray);
+					gray_pix.write((ap_uint<8>)gray);
 					int yy2 = yy%4;
 					if((yy2 == 1 || yy2 == 2) && (xx == 3 || xx == 4)){
 						if(yy == 6 && xx == 4){
@@ -102,8 +102,8 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 							b_rst.b = u_bsum / 4 + (((u_bsum % 2) > 0) ? 1 : 0);
 							b_rst.g = u_gsum / 4 + (((u_gsum % 2) > 0) ? 1 : 0);
 							b_rst.r = u_rsum / 4 + (((u_rsum % 2) > 0) ? 1 : 0);
-							upper_scaled_rgb.write(u_rst);
-							bottom_scaled_rgb.write(b_rst);
+							//upper_scaled_rgb.write(u_rst);
+							//bottom_scaled_rgb.write(b_rst);
 							//cout << y << " " << x << " " << u_rst.b << " " << b_rst.b << endl;
 						}else{
 							int bufindex = 4 * (yy / 4) + 2 * (yy2 / 2) + (xx - 3);
@@ -162,7 +162,7 @@ accum_fixed multiply_accum_bgr(ap_fixed_float weights[3], bgr features){
 	b_fixed.range(21,14) = bb.range(7, 0);
 	g_fixed.range(21,14) = gg.range(7, 0);
 	r_fixed.range(21,14) = rr.range(7, 0);
-#pragma HLS allocation instances=mul limit=2
+//#pragma HLS allocation instances=mul limit=2
 	return (accum_fixed)weights[0] * (accum_fixed)b_fixed + (accum_fixed)weights[1] * (accum_fixed)g_fixed + (accum_fixed)weights[2] * (accum_fixed)r_fixed;
 }
 
@@ -224,7 +224,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 	int rstcnt = 0;
 	for(int y = 0; y < IMAGE_HEIGHT / 8; y++){
 		for(int x = 0; x < IMAGE_WIDTH / 8; x++){
-#pragma HLS PIPELINE II=1
+#pragma HLS PIPELINE II=60
 			bgr upper_bgr = upper_scaled_in.read();
 			bgr bottom_bgr = bottom_scaled_in.read();
 			//h->b s->g v->r
@@ -494,9 +494,9 @@ accum_fixed multiply_accum(histdata weights, ap_fixed9_float features){
 			+ weights.data[6] * features.data[6] + weights.data[7] * features.data[7] + weights.data[8] * features.data[8];*/
 }
 void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_fixed9_float>& upperright, hls::stream<ap_fixed9_float>& bottomleft, hls::stream<ap_fixed9_float>& bottomright,
-		hls::stream<accum_fixed>& resultstream){
+		hls::stream<accum_fixed>& resultstream, weight w1[WINDOW_BLOCKNUM_W], weight w2[WINDOW_BLOCKNUM_W], weight w3[WINDOW_BLOCKNUM_W]){
 
-	weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {
+	/*weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {
 	{{{-0.020430088043212890625, -0.017955780029296875, -0.0637295246124267578125, -0.018318653106689453125, 0.0344316959381103515625, -0.09418582916259765625, -0.2703206539154052734375, -0.1507284641265869140625, 0.209075450897216796875},{-0.021728992462158203125, 0.166233062744140625, -0.009647369384765625, 0.1395256519317626953125, 0.0637514591217041015625, 0.0468852519989013671875, -0.07170200347900390625, -0.087221622467041015625, 0.0221436023712158203125},{0.015216350555419921875, 0.066412448883056640625, -0.0578062534332275390625, 0.035459995269775390625, -0.08220767974853515625, 0.061465740203857421875, 0.0196068286895751953125, -0.074980258941650390625, 0.2188866138458251953125},{-0.044877529144287109375, -0.0183203220367431640625, 0.0238387584686279296875, -0.0877244472503662109375, -0.005450725555419921875, 0.1781313419342041015625, 0.0186116695404052734375, -0.074532985687255859375, 0.086177349090576171875}},
 	{{-0.012218952178955078125, 0.1627256870269775390625, -0.0175497531890869140625, 0.155663013458251953125, 0.135300159454345703125, 0.1663110256195068359375, -0.008053302764892578125, -0.09210872650146484375, 0.0627148151397705078125},{-0.2366716861724853515625, -0.259692668914794921875, 0.00426578521728515625, -0.0479276180267333984375, -0.066269397735595703125, -0.11805057525634765625, 0.192030429840087890625, -0.0374953746795654296875, 0.1761262416839599609375},{-0.051277637481689453125, -0.0122025012969970703125, 0.078645229339599609375, -0.1183888912200927734375, -0.057731151580810546875, -0.1308944225311279296875, -0.1038444042205810546875, -0.0746822357177734375, 0.0205447673797607421875},{0.00824451446533203125, 0.021021366119384765625, -0.04734039306640625, 0.0500049591064453125, 0.029080867767333984375, 0.111240863800048828125, 0.2182939052581787109375, 0.00374698638916015625, 0.0012719631195068359375}},
 	{{-0.157608509063720703125, -0.31154346466064453125, 0.045083522796630859375, 0.0863420963287353515625, -0.05441379547119140625, -0.1110031604766845703125, 0.270878314971923828125, -0.009723186492919921875, 0.3116266727447509765625},{-0.06541728973388671875, 0.20284271240234375, 0.164892673492431640625, 0.0336210727691650390625, -0.1107451915740966796875, 0.071824550628662109375, 0.171666622161865234375, -0.0717594623565673828125, -0.0590531826019287109375},{-0.023344516754150390625, 0.0589826107025146484375, -0.0721988677978515625, 0.0384504795074462890625, -0.0697124004364013671875, -0.01961517333984375, -0.0338089466094970703125, -0.070092678070068359375, -0.044692516326904296875},{-0.0115578174591064453125, 0.0185925960540771484375, 0.0554010868072509765625, -0.109764575958251953125, -0.0007760524749755859375, 0.1224462985992431640625, 0.061420440673828125, 0.070434093475341796875, 0.075275897979736328125}},
@@ -518,46 +518,9 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 	{{0.076097965240478515625, 0.0273387432098388671875, -0.2020175457000732421875, -0.07595920562744140625, -0.092121124267578125, -0.133623600006103515625, 0.0534384250640869140625, -0.1305811405181884765625, 0.029035091400146484375},{0.0546720027923583984375, 0.22876071929931640625, 0.1419804096221923828125, 0.1915900707244873046875, 0.1181337833404541015625, 0.1097633838653564453125, -0.11330509185791015625, -0.09873294830322265625, -0.0384273529052734375},{-0.1358444690704345703125, -0.239682674407958984375, -0.4888846874237060546875, -0.117208003997802734375, -0.0981581211090087890625, -0.06147003173828125, -0.149160861968994140625, -0.061380863189697265625, 0.111874103546142578125},{-0.221196651458740234375, -0.217284679412841796875, 0.0646402835845947265625, 0.2401549816131591796875, 0.0897824764251708984375, -0.0181934833526611328125, -0.0294425487518310546875, 0.1713554859161376953125, 0.1607372760772705078125}},
 	{{0.1059324741363525390625, 0.0573940277099609375, 0.1309802532196044921875, 0.0370347499847412109375, 0.0514202117919921875, 0.058502197265625, -0.004030704498291015625, -0.02115726470947265625, -0.0649898052215576171875},{0.10644435882568359375, 0.13549518585205078125, 0.3392810821533203125, -0.050776958465576171875, 0.0318152904510498046875, -0.0828113555908203125, 0.0373761653900146484375, 0.040672779083251953125, 0.2525589466094970703125},{-0.2665717601776123046875, -0.269592761993408203125, 0.04843807220458984375, 0.056252002716064453125, -0.01996326446533203125, -0.065372943878173828125, -0.0948145389556884765625, -0.074769496917724609375, -0.144232273101806640625},{-0.37279796600341796875, -0.485281467437744140625, 0.1513741016387939453125, -0.146758556365966796875, -0.024086475372314453125, -0.37051868438720703125, -0.0457251071929931640625, 0.038651943206787109375, 0.0813236236572265625}},
 	{{0.157402515411376953125, 0.2985990047454833984375, 0.1802237033843994140625, 0.02737140655517578125, -0.002029895782470703125, -0.1548511981964111328125, 0.0635929107666015625, 0.1027443408966064453125, 0.14031982421875},{0.1507413387298583984375, 0.228121280670166015625, 0.032693386077880859375, -0.104747772216796875, -0.080452442169189453125, -0.16116809844970703125, -0.0958995819091796875, -0.0021612644195556640625, -0.0088589191436767578125},{-0.2566907405853271484375, -0.257682323455810546875, 0.359356403350830078125, -0.03969669342041015625, -0.0547826290130615234375, -0.185234546661376953125, -0.065794467926025390625, -0.018648624420166015625, -0.033547878265380859375},{-0.143035411834716796875, -0.0083160400390625, 0.17058849334716796875, -0.1721794605255126953125, -0.2171494960784912109375, -0.3754231929779052734375, -0.5502097606658935546875, -0.295653820037841796875, -0.0011196136474609375}}}};
-
-	/*cout << "const weight WeightData[WINDOW_BLOCKNUM_H][WINDOW_BLOCKNUM_W] = {" << endl;
-	for(int i = 0; i < WINDOW_BLOCKNUM_H; i++){
-		cout << "{";
-		for(int j = 0; j < WINDOW_BLOCKNUM_W; j++){
-			cout << "{";
-			weight w = WeightData[i][j];
-			cout << "{";
-			for(int k = 0; k < 9; k++){
-				cout << w.upperleft.data[k].to_string(10);
-				if(k != 8) cout << ", ";
-			}
-			cout << "},";
-			cout << "{";
-			for(int k = 0; k < 9; k++){
-				cout << w.upperright.data[k].to_string(10);
-				if(k != 8) cout << ", ";
-			}
-			cout << "},";
-			cout << "{";
-			for(int k = 0; k < 9; k++){
-				cout << w.bottomleft.data[k].to_string(10);
-				if(k != 8) cout << ", ";
-			}
-			cout << "},";
-			cout << "{";
-			for(int k = 0; k < 9; k++){
-				cout << w.bottomright.data[k].to_string(10);
-				if(k != 8) cout << ", ";
-			}
-			cout << "}";
-			cout << "}";
-			if(j != WINDOW_BLOCKNUM_W - 1) cout << ", " << endl;
-		}
-		cout << "}";
-		if(i !=  WINDOW_BLOCKNUM_H - 1) cout << ", " << endl;
-	}
-	cout << "};" << endl;*/
-#pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
-#pragma HLS RESOURCE variable=WeightData core=ROM_1P_BRAM
+*/
+//#pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
+//#pragma HLS RESOURCE variable=WeightData core=ROM_1P_BRAM
 	accum_fixed PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
 #pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
 #pragma HLS RESOURCE variable=PartialSum core=RAM_2P_BRAM
@@ -574,7 +537,7 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 			ap_fixed9_float ur = upperright.read();
 			ap_fixed9_float bl = bottomleft.read();
 			ap_fixed9_float br = bottomright.read();
-#pragma HLS PIPELINE II=1
+#pragma HLS PIPELINE II=60
 			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
 //#pragma HLS PIPELINE II=1
 				bool inside_window = (block_index_x <= x && x <= block_index_x + 72);
@@ -586,8 +549,11 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 						if(0 <= block_start_y && block_start_y <= (BLOCK_NUM_H - WINDOW_BLOCKNUM_H)){
 							int partial_sum_index_y = (y - block_index_y) % WINDOW_BLOCKNUM_H;
 
-							weight w = WeightData[block_index_y][block_index_x];
-#pragma HLS allocation instances=multiply_accum limit=1
+							weight w;//= WeightData[block_index_y][block_index_x];
+							if(block_index_y == 0) w = w1[block_index_x];
+							else if(block_index_y == 1) w = w2[block_index_x];
+							else if(block_index_y == 2) w = w3[block_index_x];
+#pragma HLS allocation instances=multiply_accum limit=2
 							accum_fixed tmp_partial_sum = multiply_accum(w.upperleft, ul) + multiply_accum(w.upperright, ur)
 									+ multiply_accum(w.bottomleft, bl) + multiply_accum(w.bottomright, br);
 							if(block_index_y == 0 && block_index_x == 0) PartialSum[partial_sum_index_y][winx] = tmp_partial_sum;
@@ -612,7 +578,7 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 }
 
 
-void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream){
+void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream, weight w1[WINDOW_BLOCKNUM_W], weight w2[WINDOW_BLOCKNUM_W], weight w3[WINDOW_BLOCKNUM_W]){
 
 	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
 	hls::stream<ap_uint<8> > gray_pix;
@@ -623,21 +589,27 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 	hls::stream<accum_fixed> hog_resultstream, bgr_hsv_resultstream;
 #pragma HLS INTERFACE axis port=instream
 #pragma HLS INTERFACE axis port=outstream
+#pragma HLS INTERFACE bram port = w1
+#pragma HLS INTERFACE bram port = w2
+#pragma HLS INTERFACE bram port = w3
+#pragma HLS RESOURCE variable=w1 core=ROM_1P_BRAM
+#pragma HLS RESOURCE variable=w2 core=ROM_1P_BRAM
+#pragma HLS RESOURCE variable=w3 core=ROM_1P_BRAM
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
 #pragma HLS DATAFLOW
-#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 100 dim = 1
-	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
+//#pragma HLS STREAM variable = bgr_hsv_resultstream depth = 100 dim = 1
+	grayscale_and_resizing(instream, gray_pix);//, upper_scaled_rgb, bottom_scaled_rgb);
 	compute_mag_and_bin(gray_pix, magstream, binstream);
 	cell_histogram_generate(magstream, binstream, bottom, upper);
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
-	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
-	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
+	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream, w1, w2, w3);
+	//bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
 	int outputnum = 4161;
 	accum_fixed bias = -1.7700042;
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
-		accum_fixed bgr_hsv = bgr_hsv_resultstream.read();//bgr_hsv_result[i];
-		accum_fixed bined = hog + bgr_hsv + bias;
+		//accum_fixed bgr_hsv = bgr_hsv_resultstream.read();//bgr_hsv_result[i];
+		accum_fixed bined = hog;// + bgr_hsv + bias;
 		float final_rst_float = bined.to_float();
 		//float final_rst_float = bgr_hsv.to_float();
 		//cout << fixed << setprecision(10) << final_rst_float << endl;
