@@ -51,8 +51,8 @@ int main(){
 	hls::stream<ap_axiu<32,1,1,1> > instream;
 
 	//Input Value Preparation
-	for(int y = 0; y < 480; y++){
-		for(int x = 0; x < 640; x++){
+	for(int y = 0; y < 240; y++){
+		for(int x = 0; x < 320; x++){
 			cv::Vec<unsigned char, 4> pix = bgra_img.ptr<cv::Vec4b>(y)[x];
 			//bgr in = bgr{pix[0], pix[1], pix[2]};
 			//instream << in;
@@ -77,7 +77,8 @@ int main(){
 				}converter;
 				converter.ival = data;
 				float rst = converter.oval;
-				cout << fixed << setprecision(10) << rst << endl;
+				float proba = 1.0/(1.0 + exp(-1 * rst));
+				if(proba > 0.80) cout << fixed << setprecision(10) << rst << " " << proba*100.0 << endl;
 	}
 
 	bool err = false;

@@ -25,8 +25,8 @@ struct bgr{
 
 using namespace std;
 
-#define IMAGE_WIDTH 640
-#define IMAGE_HEIGHT 480
+#define IMAGE_WIDTH 320
+#define IMAGE_HEIGHT 240
 #define WINDOW_BLOCKNUM_W 7
 #define WINDOW_BLOCKNUM_H 3
 #define CELL_SIZE 8
@@ -207,7 +207,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 	{{0.28397242, -0.040270352, -0.021484664}, {0.33941849, -0.14723122, -0.035179396}, {-0.035080773, -0.14034925, -0.036054036}, {0.022488399, -0.013106878, -0.072457735}}}
 
 	};
-	accum_fixed PartialSum[4][80 - 8 + 1];
+	accum_fixed PartialSum[4][(IMAGE_WIDTH / 8) - 8 + 1];
 #pragma HLS RESOURCE variable=WeightData core=ROM_1P_BRAM
 #pragma HLS ARRAY_PARTITION variable=WeightData complete dim=1
 #pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
@@ -216,7 +216,7 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 #pragma HLS RESOURCE variable=PartialSum[2] core=RAM_2P_BRAM
 #pragma HLS RESOURCE variable=PartialSum[3] core=RAM_2P_BRAM
 	for(int i = 0; i < 4; i++){
-		for(int j = 0; j < 73; j++){
+		for(int j = 0; j < ((IMAGE_WIDTH / 8) - 8 + 1); j++){
 #pragma HLS PIPELINE II = 1
 			PartialSum[i][j] = 0;
 		}
@@ -224,20 +224,18 @@ void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<b
 	int rstcnt = 0;
 	for(int y = 0; y < IMAGE_HEIGHT / 8; y++){
 		for(int x = 0; x < IMAGE_WIDTH / 8; x++){
-#pragma HLS PIPELINE II=1
+//#pragma HLS PIPELINE II=1
 			bgr upper_bgr = upper_scaled_in.read();
 			bgr bottom_bgr = bottom_scaled_in.read();
 			//h->b s->g v->r
 			bgr upper_hsv, bottom_hsv;
-//#pragma HLS allocation instances=bgr2hsv limit=1 function
-//#pragma HLS DATAFLOW
 			bgr2hsv(upper_bgr.b, upper_bgr.g, upper_bgr.r, &upper_hsv.b, &upper_hsv.g, &upper_hsv.r);
 			bgr2hsv(bottom_bgr.b, bottom_bgr.g, bottom_bgr.r, &bottom_hsv.b, &bottom_hsv.g, &bottom_hsv.r);
 
 			for(int cell_index_x = 7; cell_index_x >= 0; cell_index_x--){
-//#pragma HLS PIPELINE II=1
+#pragma HLS PIPELINE II=1
 				int winx = x - cell_index_x;
-				bool inside_window = (cell_index_x <= x && x <= cell_index_x + 72);
+				bool inside_window = (cell_index_x <= x && x <= cell_index_x + (IMAGE_WIDTH / 8 - 8));
 				if(inside_window){
 					for(int cell_index_y = 0; cell_index_y < 4; cell_index_y++){
 						int cell_start_y = y - cell_index_y;
@@ -574,10 +572,10 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 			ap_fixed9_float ur = upperright.read();
 			ap_fixed9_float bl = bottomleft.read();
 			ap_fixed9_float br = bottomright.read();
-#pragma HLS PIPELINE II=1
-			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
 //#pragma HLS PIPELINE II=1
-				bool inside_window = (block_index_x <= x && x <= block_index_x + 72);
+			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
+#pragma HLS PIPELINE II=1
+				bool inside_window = (block_index_x <= x && x <= block_index_x + (IMAGE_WIDTH / 8 - 8));
 				if(inside_window){
 					int winx = x - block_index_x;
 					//block_index_y indicates where (ul,ur,bl,br) is located in the window in y axis.
@@ -632,7 +630,7 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
 	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream);
 	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream);
-	int outputnum = 4161;
+	int outputnum = 27*33;//4161;
 	accum_fixed bias = -1.7700042;
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
