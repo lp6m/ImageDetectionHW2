@@ -118,7 +118,8 @@ def myhog(image):
                 if sum_of_block[blkIdx] == 0 :
                     dst[index] = 0
                 else:
-                    dst[index] = np.sqrt(descriptor[index] / sum_of_block[blkIdx])
+                    # dst[index] = np.sqrt(descriptor[index] / sum_of_block[blkIdx])
+                    dst[index] = descriptor[index] / sum_of_block[blkIdx]
                     
 
     return np.array(dst)
