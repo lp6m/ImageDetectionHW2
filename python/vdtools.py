@@ -45,8 +45,9 @@ class WindowFinder(object):
         self.window_range_maxy = 0.6
 
         # The locations of all the data.
-        self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek']
-        self.red_data_folders = ['../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2', '../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall']
+        #350, 234, 369, 456, 360    
+        self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
+        self.red_data_folders = ['../data/red', '../data/red_close_gairan','../data/red_close_wall', '../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2']#'../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall'
         # self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal']
         # self.red_data_folders = ['../data/fordate', '../data/fpt/red_shukai']
         
@@ -57,7 +58,7 @@ class WindowFinder(object):
         # self.untrained_clf = RandomForestClassifier(n_estimators=100, max_features = 2, min_samples_leaf = 4,max_depth = 25)
         tuned_parameters = [{'C': [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]}]
         # tuned_parameters = [{'C': [0.1]}]
-        self.grid_search = GridSearchCV(svm.LinearSVC(), tuned_parameters, cv=5)
+        self.grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
 
         self.trained_clf, self.scaler = self.__get_classifier_and_scaler()
 
@@ -151,7 +152,7 @@ class WindowFinder(object):
         """   
         if self.load_features:
             print('Loading saved features...')
-            car_features, notcar_features = pickle.load( open( "./cache/features.p", "rb" ) )
+            notred_features, red_features, filenames = pickle.load( open( "./cache/features.p", "rb" ) )
             
         else: 
             # print("Extracting features from %s samples..." % self.sample_size)          
@@ -184,7 +185,7 @@ class WindowFinder(object):
             print("Running time : %s seconds" % (end - start))
             
             print('Pickling features...')
-            pickle.dump((notred_features, red_features), open( "./cache/features.p", "wb" ))
+            pickle.dump((notred_features, red_features, filenames), open( "./cache/features.p", "wb" ))
             
         return notred_features, red_features, filenames
 
@@ -230,8 +231,8 @@ class WindowFinder(object):
             # spatial_hls = self.__bin_spatial(hls)
             spatial_rgb = self.__bin_spatial(img)
             spatial_hsv = cv2.cvtColor(spatial_rgb, cv2.COLOR_BGR2HSV)
-            img_features.append(spatial_hsv.ravel()/255)
-            img_features.append(spatial_rgb.ravel()/255)
+            img_features.append(spatial_hsv.ravel()/256)
+            img_features.append(spatial_rgb.ravel()/256)
 
         #7) Compute HOG features if flag is set
         if self.hog_feat == True:
