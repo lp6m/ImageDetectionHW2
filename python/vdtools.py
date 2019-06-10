@@ -4,7 +4,6 @@ import numpy as np
 import cv2
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
-from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.metrics import recall_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -39,14 +38,10 @@ class WindowFinder(object):
         self.hist_feat      = False # Histogram features on or off
         self.hog_feat       = True # HOG features on or off
 
-        self.window_range_minx = 0.15
-        self.window_range_maxx = 0.85
-        self.window_range_miny = 0.0
-        self.window_range_maxy = 0.6
-
         # The locations of all the data.
-        self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek']
-        self.red_data_folders = ['../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2', '../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall']
+        #350, 234, 369, 456, 360    
+        self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
+        self.red_data_folders = ['../data/red', '../data/red_close_gairan','../data/red_close_wall', '../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2']#'../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall'
         # self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal']
         # self.red_data_folders = ['../data/fordate', '../data/fpt/red_shukai']
         
@@ -57,21 +52,9 @@ class WindowFinder(object):
         # self.untrained_clf = RandomForestClassifier(n_estimators=100, max_features = 2, min_samples_leaf = 4,max_depth = 25)
         tuned_parameters = [{'C': [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]}]
         # tuned_parameters = [{'C': [0.1]}]
-        self.grid_search = GridSearchCV(svm.LinearSVC(), tuned_parameters, cv=5)
+        self.grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
 
         self.trained_clf, self.scaler = self.__get_classifier_and_scaler()
-
-        self.windows_list = []
-        self.__make_windows()
-        ###### Variables for CNN ##########
-
-        # print('Loading Neural Network...')
-        # self.nn = load_model('models/keras(32x32).h5')
-        # self.nn_train_size = (32,32) # size of training data used for CNN
-        # self.nn.summary()
-        # print('Neural Network Loaded.')
-
-
 
     def __get_classifier_and_scaler(self):
         """
@@ -134,8 +117,6 @@ class WindowFinder(object):
                     print('\033[31mproba = {}, predict = {}, correct = {}, testcase = {}\033[0m'.format(round(ans_proba, 3), ans, correct, test_filenames[i]))
                 else:
                     print('proba = {}, predict = {}, correct = {}, testcase = {}'.format(round(ans_proba, 3), ans, correct, test_filenames[i]))
-            # print('Test Recall of CLF = ', round(recall_score(y_test, preds), 4))
-            # print('Test Recall of CLF = ', round(precision_score(y_test, preds), 4))
             # Check the prediction time for a single sample
             t=time.time()
 
@@ -151,7 +132,7 @@ class WindowFinder(object):
         """   
         if self.load_features:
             print('Loading saved features...')
-            car_features, notcar_features = pickle.load( open( "./cache/features.p", "rb" ) )
+            notred_features, red_features, filenames = pickle.load( open( "./cache/features.p", "rb" ) )
             
         else: 
             # print("Extracting features from %s samples..." % self.sample_size)          
@@ -184,7 +165,7 @@ class WindowFinder(object):
             print("Running time : %s seconds" % (end - start))
             
             print('Pickling features...')
-            pickle.dump((notred_features, red_features), open( "./cache/features.p", "wb" ))
+            pickle.dump((notred_features, red_features, filenames), open( "./cache/features.p", "wb" ))
             
         return notred_features, red_features, filenames
 
@@ -230,8 +211,8 @@ class WindowFinder(object):
             # spatial_hls = self.__bin_spatial(hls)
             spatial_rgb = self.__bin_spatial(img)
             spatial_hsv = cv2.cvtColor(spatial_rgb, cv2.COLOR_BGR2HSV)
-            img_features.append(spatial_hsv.ravel()/255)
-            img_features.append(spatial_rgb.ravel()/255)
+            img_features.append(spatial_hsv.ravel()/256)
+            img_features.append(spatial_rgb.ravel()/256)
 
         #7) Compute HOG features if flag is set
         if self.hog_feat == True:
@@ -299,226 +280,3 @@ class WindowFinder(object):
         prediction = 1/(1+(np.exp(-1*self.trained_clf.decision_function(test_features))))
         print(prediction)
         return prediction
-
-    def __classify_windows(self, img, windows):
-        """
-        Define a function you will pass an image 
-        and the list of windows to be searched (output of slide_windows())
-        """
-
-        #1) Create an empty list to receive positive detection windows
-        on_windows = []
-        probas = []
-
-        #2) Iterate over all windows in the list
-        rtime = 0.0
-        ftime = 0.0
-        ttime = 0.0
-        ptime = 0.0
-        for i,window in enumerate(windows):
-
-            
-            ######### Classifier HOG Feature Prediction #########
-            t1 = time.time()
-            test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 32), cv2.INTER_NEAREST)
-            # cv2.imwrite('resize/resized' + str(i) + '.png', test_img)
-            # cv2.waitKey(0)
-            t2 = time.time()
-            features = self.__single_img_features(test_img)
-            t3 = time.time()
-            test_features = self.scaler.transform(np.array(features).reshape(1, -1))
-            t4 = time.time()
-            # pickle.dump(test_features, open( "./test_features.p", "wb" ) )
-            #[[1,2..968]]
-            #extract 2nd probability
-            proba = self.trained_clf.predict_proba(test_features)
-            # print(proba)
-            prediction = self.trained_clf.predict_proba(test_features)[:,1]
-            # pickle.dump(prediction, open( "./prediction.p", "wb" ) )
-            t5 = time.time()
-            
-            ftime += (t3 - t2)
-            ptime += (t5 - t4)
-            ## SVC prediction
-            # prediction = self.trained_clf.predict(test_features)
-
-
-            ######### Neural Network Predicion ########
-            # test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]],
-            #                       self.nn_train_size)
-            # test_img = self.__normalize_image(test_img)
-            # test_img = np.reshape(test_img, (1,self.nn_train_size[0],self.nn_train_size[1],3))
-            # prediction = self.nn.predict_classes(test_img, verbose=0)
-
-
-            if prediction >= self.pred_thresh:
-                on_windows.append(window)
-                probas.append(prediction)
-
-        print('feature time : ', ftime)
-        print('prediction time : ', ptime)
-        #8) Return windows for positive detections
-        # print("Number of hot windows:", len(on_windows))
-        # print("Number of windows:", len(windows))
-        return on_windows, probas
-
-
-
-    def __normalize_image(self, img):
-
-        img = img.astype(np.float32)
-        # Normalize image
-        img = img / 255.0 - 0.5
-        return img
-
-    def __visualise_searchgrid_and_hot(self, img, windows, hot_windows, ax=None):
-        """
-        Draws the search grid and the hot windows.
-        """
-
-        # print('Hot Windows...', hot_windows)
-        search_grid_img = self.__draw_boxes(img, windows, color=(0, 0, 255), thick=6)                    
-        hot_window_img = self.__draw_boxes(img, hot_windows, color=(0, 0, 255), thick=6)                    
-
-        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(10,6))
-        f.tight_layout()
-        ax1.imshow(search_grid_img)
-        ax1.set_title('Search Grid')
-        ax2.imshow(hot_window_img)
-        ax2.set_title('Hot Boxes')
-
-        plt.show()
-
-        return
-
-    # Define a function to draw bounding boxes
-    def __draw_boxes(self, img, bboxes, color=(0, 0, 255), thick=6):
-        """Draws boxes on image from a list of windows"""
-
-        # Make a copy of the image
-        imcopy = np.copy(img)
-        # Iterate through the bounding boxes
-        for bbox in bboxes:
-            # Draw a rectangle given bbox coordinates
-            cv2.rectangle(imcopy, bbox[0], bbox[1], color, thick)
-        # Return the image copy with boxes drawn
-        return imcopy
-
-    
-    def __slide_windows(self, x_start_stop,
-                                y_start_stop, xy_window,
-                                xy_overlap,
-                                visualise=False):
-        xspan = x_start_stop[1] - x_start_stop[0]
-        yspan = y_start_stop[1] - y_start_stop[0]
-        # Compute the number of pixels per step in x/y
-        nx_pix_per_step = np.int(xy_window[0]*(1 - xy_overlap[0]))
-        ny_pix_per_step = np.int(xy_window[1]*(1 - xy_overlap[1]))
-        # Compute the number of windows in x/y
-        nx_windows = np.int(xspan/nx_pix_per_step) - 1
-        ny_windows = np.int(yspan/ny_pix_per_step) - 1
-        # Initialize a list to append window positions to
-        window_list = []
-        for ys in range(ny_windows):
-            for xs in range(nx_windows):
-                # Calculate window position
-                startx = xs*nx_pix_per_step + x_start_stop[0]
-                endx = startx + xy_window[0]
-                starty = ys*ny_pix_per_step + y_start_stop[0]
-                endy = starty + xy_window[1]
-                
-                # Append window position to list
-                window_list.append(((startx, starty), (endx, endy)))
-        print(nx_windows, ny_windows, xspan, yspan)
-        return window_list
-
-    def __make_windows(self):
-        
-        # define the minimum window size
-        x_min =[640*self.window_range_minx, 640*self.window_range_maxx] #minimum window slide area sx, ex
-        y_min =[480*self.window_range_miny, 480*self.window_range_maxy] #minimum window slise area sx, ey
-        xy_min = (80, 40)
-
-        # define the maxium window size
-        x_max = x_min#[300, 1280]
-        y_max = y_min#[400, 700]
-        xy_max = (200, 100)
-        # intermedian windows
-        n = 4 # the number of total window sizes
-        x = []
-        y = []
-        xy =[]
-        # chose the intermediate sizes by interpolation.
-        x_range_w = x_max[0] - x_min[0]
-        y_range_h = y_max[0] - y_min[0]
-        for i in range(n):
-            #sx, ex
-            x_start_stop =[int(x_min[0] + i*(x_max[0]-x_min[0])/(n-1)), 
-                           int(x_min[1] + i*(x_max[1]-x_min[1])/(n-1))]
-            #sy, ey
-            y_start_stop =[int(y_min[0] + i*(y_max[0]-y_min[0])/(n-1)), 
-                           int(y_min[1] + i*(y_max[1]-y_min[1])/(n-1))]
-            #window width height
-            xy_window    =[int(xy_min[0] + i*(xy_max[0]-xy_min[0])/(n-1)), 
-                           int(xy_min[1] + i*(xy_max[1]-xy_min[1])/(n-1))]
-            x.append(x_start_stop)
-            y.append(y_start_stop)
-            xy.append(xy_window)
-        print(x)
-        print(y)
-        print(xy)
-
-        windows1 = self.__slide_windows(x_start_stop= x[0], y_start_stop = y[0], 
-                            xy_window= xy[0], xy_overlap=(0.5, 0.5))
-        windows2 = self.__slide_windows(x_start_stop= x[1], y_start_stop = y[1], 
-                            xy_window= xy[1], xy_overlap=(0.75, 0.5))
-        windows3 = self.__slide_windows(x_start_stop= x[2], y_start_stop = y[2], 
-                            xy_window= xy[2], xy_overlap=(0.75, 0.5))
-        windows4 = self.__slide_windows(x_start_stop= x[3], y_start_stop = y[3], 
-                            xy_window= xy[3], xy_overlap=(0.75, 0.5))
-        self.windows_list = list(windows1 + windows2 + windows3 + windows4)
-        print(len(windows1), len(windows2), len(windows3), len(windows4))
-        pickle.dump( self.windows_list, open( "./cache/windows_list.p", "wb" ) )
-        print("window_candidate :  {}".format(len(self.windows_list)))
-
-    def get_hot_windows(self, img, visualise=False):
-        def check_red_ratio(image):
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
-            h = hsv[:, :, 0]
-            s = hsv[:, :, 1]
-            mask = np.zeros(h.shape, dtype=np.bool)
-            mask[((h < 20) | (h > 200)) & (s > 128)] = True
-
-            redgaso = np.count_nonzero(mask == True)
-            ratio = round(float(redgaso*100.0/mask.size), 3)
-            return ratio
-
-        #remove arienai candidate
-        t1 = time.time()
-        rf_windows = []
-        for window in self.windows_list:
-            resized = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 32), cv2.INTER_LINEAR)
-            if(check_red_ratio(resized) > 2.00):
-                rf_windows.append(window)
-
-        print('candidate %d -> %d' % (len(self.windows_list), len(rf_windows)))
-        t2 = time.time()
-        print('remove arienai time: ', t2-t1)
-        hot_windows, probas = self.__classify_windows(img, rf_windows)
-        # hot_windows = self.__classify_windows(img, self.windows_list)
-
-        t3 = time.time()
-        print('get_hot_windows() iteration time: ', t3 - t1)
-       
-        if visualise:
-            window_img = self.__draw_boxes(img, hot_windows, color=(0, 0, 255), thick=6)                    
-
-
-            plt.figure(figsize=(10,6))
-            plt.imshow(window_img)
-            plt.tight_layout()
-            plt.show()
-            # return window_img
-            
-
-        return hot_windows, probas
