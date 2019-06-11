@@ -1,15 +1,16 @@
-#ImageDetectionHW2  
+# ImageDetectionHW2  
+
 HOG + SVM Object Detect Implementation on FPGA  
 Target device is Ultra96(rev1). The version of Vivado and Vivado HLS is 2018.2.  
 In this project, the system detects red traffic signal from USB webcam captured image in real time.  
 - HLS IP Latency: min:153838 max:196936 (not fully pipelined)  
 - Achieved FPS: 142fps (including DMA data transmission time)  
 
-##usage  
+## usage  
 
 
 
-##file description  
+## file description  
 ### data  
 Training data. This files are used `python/vdtools.py`  
 ### python  
