@@ -120,9 +120,8 @@ int main(){
 
 	//Execute HW
 	hls::stream<ap_axiu<32,1,1,1>> resultstream;
-	double thresh = 0.70;
-	ap_fixed_point bias = -1.8334937;
-	hog_svm(instream, resultstream, bound_bgrhsv_w1, bound_bgrhsv_w2, bound_bgrhsv_w3, bound_bgrhsv_w4, bound_hog_w1, bound_hog_w2, bound_hog_w3, bias);
+	double thresh = 0.75;
+	hog_svm(instream, resultstream, bound_bgrhsv_w1, bound_bgrhsv_w2, bound_bgrhsv_w3, bound_bgrhsv_w4, bound_hog_w1, bound_hog_w2, bound_hog_w3, unscaled_bias);
 	int cnt = 0;
 	while(!resultstream.empty()){
 		int y = (cnt / 33) * 8;
@@ -135,7 +134,7 @@ int main(){
 		converter.ival = data;
 		float rst = converter.oval;
 		float proba = 1.0/(1.0 + exp(-1 * rst));
-		if(proba > 0.70){
+		if(proba > 0.75){
 			cout << fixed << setprecision(10) << rst << " " << proba*100.0 << endl;
 			rectangle(frame_copy, Point(x, y), Point(x + 64, y + 32), Scalar(0,0,200), 2); //x,y //Scaler = B,G,R
 			cv::putText(frame_copy, tostr(proba * 100.0), cv::Point(x,y-5), 5, 0.5, cv::Scalar(255.0,0,0), 1, CV_AA, false);
