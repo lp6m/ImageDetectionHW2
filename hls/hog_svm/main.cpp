@@ -7,9 +7,7 @@
 #include <ap_fixed.h>
 #include <iostream>
 #include <iomanip>
-
-typedef ap_fixed<32, 10> ap_fixed_point;
-typedef ap_fixed<64, 20> accum_fixed;
+#include "consts.h"
 
 struct bgr{
 	unsigned char b,g,r;
@@ -135,9 +133,7 @@ void bgr2hsv(unsigned char bb, unsigned char gg, unsigned char rr, unsigned char
 	*v = (unsigned char)pix0_V;
 }
 
-struct pixweight{
-	ap_uint<128> weight[3];
-};
+
 accum_fixed multiply_accum_bgr(ap_uint<128> weight, unsigned char uhsv, unsigned char bhsv, unsigned char ubgr, unsigned char bbgr){
 /*#pragma HLS allocation instances=udiv limit=1 operation*/
 	//As approximation, divide by 256 instead of 255.
@@ -427,14 +423,6 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 		}
 	}
 }
-
-/*struct histdata{
-	ap_fixed_point data[9];
-};*/
-struct hogweight{
-	ap_uint<128> weightval[9];
-};
-
 
 accum_fixed multiply_accum_hog(ap_uint<128> weight, ap_fixed_point ul, ap_fixed_point ur, ap_fixed_point bl, ap_fixed_point br){
 	ap_fixed_point ul_weight = 0;
