@@ -13,7 +13,7 @@
 using namespace std;
 using namespace cv;
 
-void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream);
+void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream);
 
 string tostr(double val){
 	std::stringstream ss;
@@ -68,7 +68,7 @@ int main(){
 	//hls::stream<ap_int<8> > ystream;
 	//hls::stream<ap_int<8> > xstream;
 	double thresh = 0.70;
-	hog_svm_part(instream, resultstream);
+	hog_svm(instream, resultstream);
 	while(!resultstream.empty()){
 		ap_uint<32> data = resultstream.read().data;
 				union{

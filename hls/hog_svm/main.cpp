@@ -8,16 +8,9 @@
 #include <iostream>
 #include <iomanip>
 
-//#include "consts.h"
-
-#define BLOCK_NUM_H IMAGE_HEIGHT / CELL_SIZE - 1
-
-
-//ypedef float ap_fixed_float;
-//#define AP_FIXED_INT_WIDTH 10
-typedef ap_fixed<32, 10> ap_fixed_float;
+typedef ap_fixed<32, 10> ap_fixed_point;
 typedef ap_fixed<64, 20> accum_fixed;
-//typedef ap_fixed<64,20,AP_RND> ap_fixed_float;
+
 struct bgr{
 	unsigned char b,g,r;
 };
@@ -32,9 +25,10 @@ using namespace std;
 #define CELL_SIZE 8
 #define BLOCK_SIZE 2
 #define HIST_BIN_NUM 9
-#define WINDOW_NUM_W IMAGE_WIDTH / CELL_SIZE - WINDOW_BLOCKNUM_W
-#define BLOCK_NUM_W IMAGE_WIDTH / CELL_SIZE - 1
-#define BLOCK_NUM_H IMAGE_HEIGHT / CELL_SIZE - 1
+#define WINDOW_NUM_W (IMAGE_WIDTH / CELL_SIZE - WINDOW_BLOCKNUM_W)
+#define WINDOW_NUM_H (IMAGE_HEIGHT / CELL_SIZE - WINDOW_BLOCKNUM_H)
+#define BLOCK_NUM_W (IMAGE_WIDTH / CELL_SIZE - 1)
+#define BLOCK_NUM_H (IMAGE_HEIGHT / CELL_SIZE - 1)
 
 inline int approx_distance(int dx, int dy){
 	int min, max; //uint
@@ -73,7 +67,6 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 					pix.g = (indata >> 8) & 255;
 					pix.r = (indata >> 16) & 255;
 
-					//cout << (int)pix.b << " " << (int)pix.g << " " << (int)pix.r << endl;
 					unsigned char gray = ((int)(299 * (int)pix.r + 587 * (int)pix.g + 114 * (int)pix.b) / 1000);
 					gray_pix.write(gray);
 					int yy2 = yy%4;
@@ -104,10 +97,8 @@ void grayscale_and_resizing(hls::stream<ap_axiu<32,1,1,1> >& bgr_in, hls::stream
 							b_rst.r = u_rsum / 4 + (((u_rsum % 2) > 0) ? 1 : 0);
 							upper_scaled_rgb.write(u_rst);
 							bottom_scaled_rgb.write(b_rst);
-							//cout << y << " " << x << " " << u_rst.b << " " << b_rst.b << endl;
 						}else{
 							int bufindex = 4 * (yy / 4) + 2 * (yy2 / 2) + (xx - 3);
-							//cout << bufindex << endl;
 							scaleBuffer[bufindex][x] = pix;
 						}
 					}
@@ -146,10 +137,6 @@ void bgr2hsv(unsigned char bb, unsigned char gg, unsigned char rr, unsigned char
 
 struct pixweight{
 	ap_uint<128> weight[3];
-	//ap_fixed_float upper_hsvweight[3];
-	//ap_fixed_float bottom_hsvweight[3];
-	//ap_fixed_float upper_bgrweight[3];
-	//ap_fixed_float bottom_bgrweight[3];
 };
 accum_fixed multiply_accum_bgr(ap_uint<128> weight, unsigned char uhsv, unsigned char bhsv, unsigned char ubgr, unsigned char bbgr){
 /*#pragma HLS allocation instances=udiv limit=1 operation*/
@@ -158,18 +145,18 @@ accum_fixed multiply_accum_bgr(ap_uint<128> weight, unsigned char uhsv, unsigned
 	ap_uint<64> apuint_bhsv = bhsv;
 	ap_uint<64> apuint_ubgr = ubgr;
 	ap_uint<64> apuint_bbgr = bbgr;
-	ap_fixed_float uhsv_fixed = 0;
-	ap_fixed_float bhsv_fixed = 0;
-	ap_fixed_float ubgr_fixed = 0;
-	ap_fixed_float bbgr_fixed = 0;
+	ap_fixed_point uhsv_fixed = 0;
+	ap_fixed_point bhsv_fixed = 0;
+	ap_fixed_point ubgr_fixed = 0;
+	ap_fixed_point bbgr_fixed = 0;
 	uhsv_fixed.range(21,14) = apuint_uhsv.range(7, 0);
 	bhsv_fixed.range(21,14) = apuint_bhsv.range(7, 0);
 	ubgr_fixed.range(21,14) = apuint_ubgr.range(7, 0);
 	bbgr_fixed.range(21,14) = apuint_bbgr.range(7, 0);
-	ap_fixed_float uhsv_weight = 0;
-	ap_fixed_float bhsv_weight = 0;
-	ap_fixed_float ubgr_weight = 0;
-	ap_fixed_float bbgr_weight = 0;
+	ap_fixed_point uhsv_weight = 0;
+	ap_fixed_point bhsv_weight = 0;
+	ap_fixed_point ubgr_weight = 0;
+	ap_fixed_point bbgr_weight = 0;
 	uhsv_weight.range(31, 0) = weight.range(127, 96);
 	bhsv_weight.range(31, 0) = weight.range(95, 64);
 	ubgr_weight.range(31, 0) = weight.range(63, 32);
@@ -178,8 +165,6 @@ accum_fixed multiply_accum_bgr(ap_uint<128> weight, unsigned char uhsv, unsigned
 	return (accum_fixed)uhsv_weight * (accum_fixed)uhsv_fixed + (accum_fixed)bhsv_weight * (accum_fixed)bhsv_fixed
 			+ (accum_fixed)ubgr_weight * (accum_fixed)ubgr_fixed + (accum_fixed)bbgr_weight * (accum_fixed)bbgr_fixed;
 }
-
-//accum_fixed bgr_hsv_result[4661];
 
 void bgr_hsv_svm_classification(hls::stream<bgr>& upper_scaled_in, hls::stream<bgr>& bottom_scaled_in, hls::stream<accum_fixed>& resultstream,
 		pixweight w1[8], pixweight w2[8], pixweight w3[8], pixweight w4[8]){
@@ -302,8 +287,8 @@ void compute_mag_and_bin(hls::stream<ap_uint<8> >& instream, hls::stream<int>& m
 	}
 }
 
-struct ap_fixed9_float{
-	ap_fixed_float data[9];
+struct ap_fixed_point9{
+	ap_fixed_point data[9];
 };
 
 //bottom,upper minimum:0 maximum:sqrt(255*255+255*255)*8*8 < 2^15
@@ -327,9 +312,9 @@ void cell_histogram_generate(hls::stream<magnitude_fixed>& magstream, hls::strea
 	blockpart_fixed vote_counter[HIST_BIN_NUM];
 	for(int i = 0; i < HIST_BIN_NUM; i++) vote_counter[i] = 0;
 #pragma HLS ARRAY_PARTITION variable=vote_counter complete dim=1
-	loop_y:for(int y = 0; y < IMAGE_HEIGHT; y++){//480
-		loop_winx:for(int winx = 0; winx < IMAGE_WIDTH / CELL_SIZE; winx++){ //80
-			loop_cell_index:for(int cell_index = 0; cell_index < CELL_SIZE; cell_index++){ //8
+	loop_y:for(int y = 0; y < IMAGE_HEIGHT; y++){
+		loop_winx:for(int winx = 0; winx < IMAGE_WIDTH / CELL_SIZE; winx++){
+			loop_cell_index:for(int cell_index = 0; cell_index < CELL_SIZE; cell_index++){
 #pragma HLS PIPELINE II=1
 				magnitude_fixed mag = magstream.read();
 				int bin = binstream.read();
@@ -374,20 +359,20 @@ inline blocksum_fixed myabs(blocksum_fixed input){
 	return ((input > 0) ? (blocksum_fixed)input : (blocksum_fixed)(-input));
 }
 
-ap_fixed_float div_int_to_ap_fixed(blockpart_fixed a, blocksum_fixed b){
-	if(a == 0 || b == 0) return (ap_fixed_float)0;
+ap_fixed_point div_int_to_ap_fixed(blockpart_fixed a, blocksum_fixed b){
+	if(a == 0 || b == 0) return (ap_fixed_point)0;
 	ap_uint<64> aa = a;
 	ap_uint<64> bb = b;
 	ap_uint<64> target_a = aa << 32;
 	ap_uint<64> target_b = bb << 16;
 	ap_uint<64> c = target_a / target_b;
 
-	ap_fixed_float ans = 0;
+	ap_fixed_point ans = 0;
 	ans.range(22,6) = c.range(16,0);
 	return ans;
 }
 void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::stream<blockpart_fixed_9>& upper,
-		hls::stream<ap_fixed9_float>& ul_out, hls::stream<ap_fixed9_float>& ur_out, hls::stream<ap_fixed9_float>& bl_out, hls::stream<ap_fixed9_float>& br_out){
+		hls::stream<ap_fixed_point9>& ul_out, hls::stream<ap_fixed_point9>& ur_out, hls::stream<ap_fixed_point9>& bl_out, hls::stream<ap_fixed_point9>& br_out){
 	hls::LineBuffer<2, 1, blockpart_fixed> bottomfifo[HIST_BIN_NUM], upperfifo[HIST_BIN_NUM];
 	blocksum_fixed  partial_old_block_sum = 0;
 #pragma HLS ARRAY_PARTITION variable=bottomfifo complete dim=1
@@ -396,7 +381,7 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 		for(int x = 0; x < (IMAGE_WIDTH / CELL_SIZE); x++){//80
 			blockpart_fixed_9 bottom_in = bottom.read();
 			blockpart_fixed_9 upper_in = upper.read();
-			ap_fixed9_float ul, ur, bl, br;
+			ap_fixed_point9 ul, ur, bl, br;
 
 			blocksum_fixed partial_block_new_sum = 0;
 
@@ -423,11 +408,10 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 					blockpart_fixed un_bottomleft = bottomfifo[bin_index].getval(0, 0);
 					blockpart_fixed un_bottomright = bottomfifo[bin_index].getval(1, 0);
 #pragma HLS allocation instances=div_int_to_ap_fixed limit=1 function
-					ap_fixed_float upperleft = div_int_to_ap_fixed(un_upperleft, block_sum);
-					ap_fixed_float upperright = div_int_to_ap_fixed(un_upperright, block_sum);
-					ap_fixed_float bottomleft = div_int_to_ap_fixed(un_bottomleft, block_sum);
-					ap_fixed_float bottomright = div_int_to_ap_fixed(un_bottomright, block_sum);
-					//cout << (int)un_upperleft << " " << (int)block_sum << " " << fixed << setprecision(10) << upperleft << endl;
+					ap_fixed_point upperleft = div_int_to_ap_fixed(un_upperleft, block_sum);
+					ap_fixed_point upperright = div_int_to_ap_fixed(un_upperright, block_sum);
+					ap_fixed_point bottomleft = div_int_to_ap_fixed(un_bottomleft, block_sum);
+					ap_fixed_point bottomright = div_int_to_ap_fixed(un_bottomright, block_sum);
 					ul.data[bin_index] = upperleft;
 					ur.data[bin_index] = upperright;
 					bl.data[bin_index] = bottomleft;
@@ -445,22 +429,18 @@ void block_histogram_normalization(hls::stream<blockpart_fixed_9>& bottom, hls::
 }
 
 /*struct histdata{
-	ap_fixed_float data[9];
+	ap_fixed_point data[9];
 };*/
 struct hogweight{
-	//histdata upperleft;
-	//histdata upperright;
-	//histdata bottomleft;
-	//histdata bottomright;
 	ap_uint<128> weightval[9];
 };
 
 
-accum_fixed multiply_accum_hog(ap_uint<128> weight, ap_fixed_float ul, ap_fixed_float ur, ap_fixed_float bl, ap_fixed_float br){
-	ap_fixed_float ul_weight = 0;
-	ap_fixed_float ur_weight = 0;
-	ap_fixed_float bl_weight = 0;
-	ap_fixed_float br_weight = 0;
+accum_fixed multiply_accum_hog(ap_uint<128> weight, ap_fixed_point ul, ap_fixed_point ur, ap_fixed_point bl, ap_fixed_point br){
+	ap_fixed_point ul_weight = 0;
+	ap_fixed_point ur_weight = 0;
+	ap_fixed_point bl_weight = 0;
+	ap_fixed_point br_weight = 0;
 	ul_weight.range(31, 0) = weight.range(127, 96);
 	ur_weight.range(31, 0) = weight.range(95, 64);
 	bl_weight.range(31, 0) = weight.range(63, 32);
@@ -468,7 +448,7 @@ accum_fixed multiply_accum_hog(ap_uint<128> weight, ap_fixed_float ul, ap_fixed_
 	#pragma HLS allocation instances=mul limit=2
 	return (accum_fixed)ul_weight * (accum_fixed)ul + (accum_fixed)ur_weight * (accum_fixed)ur + (accum_fixed)bl_weight * (accum_fixed)bl + (accum_fixed)br_weight * (accum_fixed)br;
 }
-void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream<ap_fixed9_float>& upperright, hls::stream<ap_fixed9_float>& bottomleft, hls::stream<ap_fixed9_float>& bottomright,
+void hog_svm_classification(hls::stream<ap_fixed_point9>& upperleft, hls::stream<ap_fixed_point9>& upperright, hls::stream<ap_fixed_point9>& bottomleft, hls::stream<ap_fixed_point9>& bottomright,
 		hls::stream<accum_fixed>& resultstream, hogweight w1[7], hogweight w2[7], hogweight w3[7]){
 	accum_fixed PartialSum[WINDOW_BLOCKNUM_H][WINDOW_NUM_W];
 #pragma HLS ARRAY_PARTITION variable=PartialSum complete dim=1
@@ -482,10 +462,10 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 	}
 	loop_y:for(int y = 0; y < BLOCK_NUM_H; y++){
 		loop_x:for(int x = 0; x < BLOCK_NUM_W; x++){
-			ap_fixed9_float ul = upperleft.read();
-			ap_fixed9_float ur = upperright.read();
-			ap_fixed9_float bl = bottomleft.read();
-			ap_fixed9_float br = bottomright.read();
+			ap_fixed_point9 ul = upperleft.read();
+			ap_fixed_point9 ur = upperright.read();
+			ap_fixed_point9 bl = bottomleft.read();
+			ap_fixed_point9 br = bottomright.read();
 //#pragma HLS PIPELINE II=1
 			for(int block_index_x = 6; block_index_x >= 0; block_index_x--){
 #pragma HLS PIPELINE II=1
@@ -526,16 +506,16 @@ void hog_svm_classification(hls::stream<ap_fixed9_float>& upperleft, hls::stream
 }
 
 
-void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream,
+void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream,
 		pixweight bgrhsv_w1[8], pixweight bgrhsv_w2[8], pixweight bgrhsv_w3[8], pixweight bgrhsv_w4[8],
-		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7]){
+		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7], ap_fixed_point bias){
 
 	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
 	hls::stream<ap_uint<8> > gray_pix;
 	hls::stream<magnitude_fixed > magstream;
 	hls::stream<int> binstream;
 	hls::stream<blockpart_fixed_9 > bottom, upper;
-	hls::stream<ap_fixed9_float > ul_out, ur_out, bl_out, br_out;
+	hls::stream<ap_fixed_point9 > ul_out, ur_out, bl_out, br_out;
 	hls::stream<accum_fixed> hog_resultstream, bgr_hsv_resultstream;
 #pragma HLS INTERFACE axis port=instream
 #pragma HLS INTERFACE axis port=outstream
@@ -554,6 +534,7 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 #pragma HLS RESOURCE variable=hog_w2 core=RAM_1P_BRAM
 #pragma HLS RESOURCE variable=hog_w3 core=RAM_1P_BRAM
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
+#pragma HLS INTERFACE s_axilit port = bias bundle = CONTROL_BUS
 #pragma HLS DATAFLOW
 #pragma HLS STREAM variable = bgr_hsv_resultstream depth = 100 dim = 1
 	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
@@ -562,15 +543,12 @@ void hog_svm_part(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu
 	block_histogram_normalization(bottom, upper, ul_out, ur_out, bl_out, br_out);
 	hog_svm_classification(ul_out, ur_out, bl_out, br_out, hog_resultstream, hog_w1, hog_w2, hog_w3);
 	bgr_hsv_svm_classification(upper_scaled_rgb, bottom_scaled_rgb, bgr_hsv_resultstream, bgrhsv_w1, bgrhsv_w2, bgrhsv_w3, bgrhsv_w4);
-	int outputnum = 27*33;//4161;
-	accum_fixed bias = -1.7700042;
+	int outputnum = WINDOW_NUM_H * WINDOW_NUM_W;
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
-		accum_fixed bgr_hsv = bgr_hsv_resultstream.read();//bgr_hsv_result[i];
-		accum_fixed bined = hog + bgr_hsv + bias;
+		accum_fixed bgr_hsv = bgr_hsv_resultstream.read();
+		accum_fixed bined = hog + bgr_hsv + (accum_fixed)bias;
 		float final_rst_float = bined.to_float();
-		//float final_rst_float = bgr_hsv.to_float();
-		//cout << fixed << setprecision(10) << final_rst_float << endl;
 		ap_axiu<32,1,1,1> val;
 		union{
 			int oval;
