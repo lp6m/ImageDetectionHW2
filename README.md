@@ -17,7 +17,7 @@ Training data. This files are used `python/vdtools.py`
 python and scikit-learn library are used to train, verify accuracy and export trained weight to cpp header file.  
 ### hls  
 HOG + SVM Vivado HLS project.
-The detail of algorithm used is is descripted in `hls/README.md`
+The detail description of algorithm used is in `hls/README.md`
 ### vivado  
 Vivado project contains Vivado HLS synthesized-IP.
 ### cpp  
