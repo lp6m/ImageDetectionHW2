@@ -5,15 +5,15 @@
 ############################################################
 open_project hog_svm
 set_top hog_svm
-add_files hog_svm/main.cpp
-add_files hog_svm/frame.png
-add_files hog_svm/consts.h
 add_files hog_svm/blue.png
-add_files -tb hog_svm/weight.h -cflags "-Wno-unknown-pragmas"
-add_files -tb hog_svm/main_tb.cpp -cflags "-Wno-unknown-pragmas"
+add_files hog_svm/consts.h
+add_files hog_svm/frame.png
+add_files hog_svm/main.cpp
+add_files -tb hog_svm/main_tb.cpp -cflags "-Wno-unknown-pragmas -Wno-unknown-pragmas"
+add_files -tb hog_svm/weight.h -cflags "-Wno-unknown-pragmas -Wno-unknown-pragmas"
 open_solution "solution1"
 set_part {xczu3eg-sbva484-1-e} -tool vivado
-create_clock -period 9 -name default
+create_clock -period 8 -name default
 #source "./hog_svm/solution1/directives.tcl"
 csim_design
 csynth_design
