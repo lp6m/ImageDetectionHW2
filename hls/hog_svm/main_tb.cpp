@@ -16,7 +16,7 @@ using namespace cv;
 
 void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream,
 		pixweight bgrhsv_w1[8], pixweight bgrhsv_w2[8], pixweight bgrhsv_w3[8], pixweight bgrhsv_w4[8],
-		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7], ap_fixed_point bias);
+		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7]);
 
 string tostr(double val){
 	std::stringstream ss;
@@ -121,7 +121,7 @@ int main(){
 	//Execute HW
 	hls::stream<ap_axiu<32,1,1,1>> resultstream;
 	double thresh = 0.75;
-	hog_svm(instream, resultstream, bound_bgrhsv_w1, bound_bgrhsv_w2, bound_bgrhsv_w3, bound_bgrhsv_w4, bound_hog_w1, bound_hog_w2, bound_hog_w3, unscaled_bias);
+	hog_svm(instream, resultstream, bound_bgrhsv_w1, bound_bgrhsv_w2, bound_bgrhsv_w3, bound_bgrhsv_w4, bound_hog_w1, bound_hog_w2, bound_hog_w3);
 	int cnt = 0;
 	while(!resultstream.empty()){
 		int y = (cnt / 33) * 8;
@@ -132,7 +132,7 @@ int main(){
 			float oval;
 		}converter;
 		converter.ival = data;
-		float rst = converter.oval;
+		float rst = converter.oval + unscaled_bias;
 		float proba = 1.0/(1.0 + exp(-1 * rst));
 		if(proba > 0.75){
 			cout << fixed << setprecision(10) << rst << " " << proba*100.0 << endl;
