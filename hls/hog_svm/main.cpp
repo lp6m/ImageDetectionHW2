@@ -496,7 +496,7 @@ void hog_svm_classification(hls::stream<ap_fixed_point9>& upperleft, hls::stream
 
 void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1,1,1> >& outstream,
 		pixweight bgrhsv_w1[8], pixweight bgrhsv_w2[8], pixweight bgrhsv_w3[8], pixweight bgrhsv_w4[8],
-		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7], ap_fixed_point bias){
+		hogweight hog_w1[7], hogweight hog_w2[7], hogweight hog_w3[7]){
 
 	hls::stream<bgr>upper_scaled_rgb, bottom_scaled_rgb;
 	hls::stream<ap_uint<8> > gray_pix;
@@ -522,7 +522,6 @@ void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1
 #pragma HLS RESOURCE variable=hog_w2 core=RAM_1P_BRAM
 #pragma HLS RESOURCE variable=hog_w3 core=RAM_1P_BRAM
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
-#pragma HLS INTERFACE s_axilit port = bias bundle = CONTROL_BUS
 #pragma HLS DATAFLOW
 #pragma HLS STREAM variable = bgr_hsv_resultstream depth = 100 dim = 1
 	grayscale_and_resizing(instream, gray_pix, upper_scaled_rgb, bottom_scaled_rgb);
@@ -535,7 +534,7 @@ void hog_svm(hls::stream<ap_axiu<32,1,1,1> >& instream, hls::stream<ap_axiu<32,1
 	for(int i = 0; i < outputnum; i++){
 		accum_fixed hog = hog_resultstream.read();
 		accum_fixed bgr_hsv = bgr_hsv_resultstream.read();
-		accum_fixed bined = hog + bgr_hsv + (accum_fixed)bias;
+		accum_fixed bined = hog + bgr_hsv;
 		float final_rst_float = bined.to_float();
 		ap_axiu<32,1,1,1> val;
 		union{
