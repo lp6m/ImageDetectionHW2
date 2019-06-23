@@ -1,0 +1,16 @@
+/dts-v1/;/plugin/;
+/ {
+    fragment@0 {
+        target-path = "/amba";
+        __overlay__ {
+            fclk0 {
+                compatible    = "ikwzm,fclkcfg-0.10.a";
+                clocks        = <&clk 0x47>;
+                insert-rate   = "100000000";
+                insert-enable = <1>;
+                remove-rate   = "1000000";
+                remove-enable = <0>;
+            };
+        };
+    };
+};

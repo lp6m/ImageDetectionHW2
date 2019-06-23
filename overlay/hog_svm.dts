@@ -1,0 +1,16 @@
+/dts-v1/;/plugin/;
+/ {
+    fragment@0 {
+        target-path = "/amba_pl@0";
+        __overlay__ {
+	    #address-cells = <2>;
+	    #size-cells = <2>;
+            hog_svm_0 {
+                compatible = "generic-uio";
+                reg = <0x0 0xA0020000 0x0 0x10000>;
+            };
+        };
+    };
+};
+
+
