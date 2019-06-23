@@ -4,8 +4,8 @@ HOG/BGRHSV + SVM FPGA Implementation of Object Detection
 This system detects red traffic signal from USB webcam captured image in real time.  
 System runs on Debian/Ubuntu OS on Ultra96(rev1) development board. HW Object Detection Accelerator is implemented in FPGA.  
 HW Accelerator is developed by HLS, which calculates the probability of being a red traffic signal for 891(32pix\*64pix) regions in (240pix\*320pix) BGR image.
-Detail of Algorithm is described in `hls/README.md`
-
+Detail of Algorithm is described in `hls/README.md`  
+![result](https://github.com/lp6m/ImageDetectionHW2/blob/image/result.png?raw=true)  
 - HLS IP Latency: min:153838 max:196936 (not fully pipelined)  
 - Achieved FPS: pver 142fps (including DMA data transmission time, more than 200 times faster than SW)  
 
@@ -48,6 +48,7 @@ root@debian-fpga:~/app/hog_svm_test# ./a.out
 elapsed:6.0000000000[milisec]
 fps:166.6666666667[fps]
 ```  
+`result.png` is generated as output. This file should be like [this](https://github.com/lp6m/ImageDetectionHW2/blob/image/frame.png?raw=true).
 
 #### 2. detect traffic signal from captured image in real-time.  
 First plug USB webcam to Ultra96.  
@@ -56,13 +57,14 @@ root@debian-fpga:~# cd ~/app/realtime_webcam
 root@debian-fpga:~/app/realtime_webcam# sh compile.sh
 root@debian-fpga:~/app/realtime_webcam# ./a.out
 ```
-
+If red traffic signal is detected, the probability is printed to standard output.  
+To avoid false positive, detection region is used.  
 ## Re-train and update trained parameter.  
 In this project, trained parameter of SVM is used in HLS IP and is saved in BRAM, and we can update this value from SW.  
 ### Run re-train in `python/train.py`  
 The detail instruction is written in `python/README.md` In short  
 
-# file description  
+# File Description  
 ### data  
 Training data. This files are used `python/vdtools.py`  
 ### python  
@@ -85,8 +87,8 @@ These application only works on Ultra96, containing interface layer to call FPGA
 ### util  
 Utility program.
 
-## reference  
+# Reference  
 [Hua Luo, Jian & Hong Lin, Chang. (2018). Pure FPGA Implementation of an HOG Based Real-Time Pedestrian Detection System. Sensors. 18. 1174. 10.3390/s18041174.](https://www.ncbi.nlm.nih.gov/pubmed/29649146)  
 
-
-
+## Known issue  
+This SVM Classifier tends to detect false positive. I think the problem exists in model, so there is nothing to do.  
