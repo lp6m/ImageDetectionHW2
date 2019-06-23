@@ -59,10 +59,15 @@ root@debian-fpga:~/app/realtime_webcam# ./a.out
 ```
 If red traffic signal is detected, the probability is printed to standard output.  
 To avoid false positive, detection region is used.  
-## Re-train and update trained parameter.  
-In this project, trained parameter of SVM is used in HLS IP and is saved in BRAM, and we can update this value from SW.  
+# Re-train and use updated SVM weight  
+In this project, trained parameters of SVM used in HLS IP are saved in BRAM, and we can update parameter from SW via AXI Bram Controller.  
 ### Run re-train in `python/train.py`  
-The detail instruction is written in `python/README.md` In short  
+Modify `self.load_saved` in `python/vdtools.py` to `False`, and run `python/train.py`  
+### Extract trained value from cached SVM model.  
+Run `python/myestimator.py`. This code extracts trained SVM paramter. Output file is genrated to `output/weights.h`.  
+### Convert float point value to 32bit unsigned int expression of fixed point.
+HLS IP uses 32bit fixed point (ap_fixed<32,10>). When updating the SVM weight from SW, the weight is expressed as a 32-bit unsigned int value. Therefore, it is necessary to convert the 32-bit fixed point to the 32-bit unsigned int of the same bit string.  
+Copy `python/output/weights.h` to `util/ap_fixed_convert/weight.h`. And run *ap_fixed_convert* on Vivado HLS, copy json string output to `app/hog_svm_test/weights.json`.  
 
 # File Description  
 ### data  
