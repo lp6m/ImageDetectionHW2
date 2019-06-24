@@ -60,7 +60,7 @@ root@debian-fpga:~/app/realtime_webcam# ./a.out
 If red traffic signal is detected, the probability is printed to standard output.  
 To avoid false positive, detection region is used.  
 # Re-train and use updated SVM weight  
-In this project, trained parameters of SVM used in HLS IP are saved in BRAM, and we can update parameter from SW via AXI Bram Controller.  
+In this project, trained parameters of SVM used in HLS IP are saved in BRAM, and you can update parameter from SW via AXI Bram Controller.  
 ### Run re-train in `python/train.py`  
 Modify `self.load_saved` in `python/vdtools.py` to `False`, and run `python/train.py`  
 ### Extract trained value from cached SVM model.  
@@ -96,4 +96,4 @@ Utility program.
 [Hua Luo, Jian & Hong Lin, Chang. (2018). Pure FPGA Implementation of an HOG Based Real-Time Pedestrian Detection System. Sensors. 18. 1174. 10.3390/s18041174.](https://www.ncbi.nlm.nih.gov/pubmed/29649146)  
 
 ## Known issue  
-This SVM Classifier tends to detect false positive. I think the problem exists in model, so there is nothing to do.  
+This SVM Classifier tends to detect false positive. This may be because of the limit of Linear SVM model.
