@@ -149,9 +149,6 @@ class WindowFinder(object):
 
             filenames.extend(notreds)
             filenames.extend(reds)
-            # notreds = notreds[0:self.sample_size]
-            # reds =  reds[0:self.sample_size]
-
 
             start = time.clock()
             notred_features = self.__extract_features(notreds)
@@ -175,7 +172,6 @@ class WindowFinder(object):
         # Iterate through the list of images
         for file in imgs:
             # Read in each one by one
-            # image = mpimg.imread(file)
             image = cv2.imread(file)
             # Get features for one image
             file_features = self.__single_img_features(image)
