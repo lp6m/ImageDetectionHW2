@@ -1,36 +1,33 @@
+import cv2
+import glob
+import json
+import math
+import numpy as np
+import pickle
+import time
+
+import myhog
+
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
-import numpy as np
-import cv2
+from scipy.ndimage.measurements import label
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
 from sklearn.metrics import recall_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
-
-from scipy.ndimage.measurements import label
-import math
-
-import glob
-import pickle
-import time
-import myhog
-
 from sklearn import svm
 from sklearn.externals import joblib
-# from sklearn import cross_validation
-# from sklearn.cross_validation import train_test_split
 from sklearn.model_selection import GridSearchCV
 
 class WindowFinder(object):
     """Finds windows in an image that contain a car."""
-    def __init__(self):
-        
+    def __init__(self, cfgfilepath):
+
         ### Hyperparameters, if changed ->(load_saved = False) If
         ### the classifier is changes load_feaures can be True
-
-        self.load_saved     = True# Loads classifier and scaler
+        self.load_saved     = False# Loads classifier and scaler
         self.load_features  = False # Loads saved features (to train new classifier)
 
         self.spatial_size   = (8, 8)
@@ -38,12 +35,13 @@ class WindowFinder(object):
         self.hist_feat      = False # Histogram features on or off
         self.hog_feat       = True # HOG features on or off
 
-        # The locations of all the data.
-        #350, 234, 369, 456, 360    
+        # The locations of all the data.   
+        # self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
+        # self.red_data_folders = ['../data/red', '../data/red_close_gairan','../data/red_close_wall', '../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2']#'../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall'
         self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
-        self.red_data_folders = ['../data/red', '../data/red_close_gairan','../data/red_close_wall', '../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2']#'../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall'
-        # self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal']
-        # self.red_data_folders = ['../data/fordate', '../data/fpt/red_shukai']
+        self.red_data_folders = ['../data/doll/bkc1']   
+        self.clf_name = 'clf,p'
+        self.scaler_name = 'scaler.p'
         
         ######Classifiers                            
         self.pred_thresh = 0.65 #Increase to decrease likelihood of detection.
@@ -63,17 +61,15 @@ class WindowFinder(object):
         """
         if self.load_saved:
             print('Loading saved classifier and scaler...')
-            clf = pickle.load( open( "./cache/clf.p", "rb" ) )
-            # print('%s loaded...' % self.untrained_clf.__class__.__name__)
-            scaler = pickle.load(open( "./cache/scaler.p", "rb" ))
+            clf = pickle.load( open( "./cache/" + self.clf_name, "rb" ) )
+            scaler = pickle.load(open( "./cache/" + self.scaler_name, "rb" ))
             print(clf.get_params())
-            # np.set_printoptions(precision=3)
+
             np.set_printoptions(suppress=True)	
             np.set_printoptions(precision=6, floatmode='fixed')
         else:
             # Split up data into randomized training and test sets
             print('Training...')
-            # print('Training a %s...' % self.untrained_clf.__class__.__name__)
             rand_state = np.random.randint(0, 100)
             
             notred_features, red_features, filenames = self.__get_features()
@@ -121,8 +117,8 @@ class WindowFinder(object):
             t=time.time()
 
             print('Pickling classifier and scaler...')
-            pickle.dump( clf, open( "./cache/clf.p", "wb" ) )
-            pickle.dump( scaler, open( "./cache/scaler.p", "wb" ) )
+            pickle.dump( clf, open( "./cache/" + self.clf_name, "wb" ) )
+            pickle.dump( scaler, open( "./cache/" + self.scaler_name, "wb" ) )
 
         return clf, scaler
            
