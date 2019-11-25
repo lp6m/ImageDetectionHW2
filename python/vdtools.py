@@ -25,34 +25,36 @@ class WindowFinder(object):
     """Finds windows in an image that contain a car."""
     def __init__(self, cfgfilepath):
 
+
+        jsonobject = None
+        with open(cfgfilepath) as f:
+            jobject = json.loads(f.read())
+        self.spatial_size = (jobject["spatial_size"], jobject["spatial_size"])
+        self.spatial_feat = jobject["spatial_feat"]# Spatial features on or off
+        self.hist_feat = jobject["hist_feat"]# Loads classifier and scaler
+        self.hog_feat = jobject["hog_feat"]# HOG features on or off
+
         ### Hyperparameters, if changed ->(load_saved = False) If
         ### the classifier is changes load_feaures can be True
-        self.load_saved     = False# Loads classifier and scaler
+        self.load_saved     = True # Histogram features on or off
         self.load_features  = False # Loads saved features (to train new classifier)
 
-        self.spatial_size   = (8, 8)
-        self.spatial_feat   = True # Spatial features on or off
-        self.hist_feat      = False # Histogram features on or off
-        self.hog_feat       = True # HOG features on or off
-
         # The locations of all the data.   
-        # self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
-        # self.red_data_folders = ['../data/red', '../data/red_close_gairan','../data/red_close_wall', '../data/fordate', '../data/fpt/red_shukai', '../data/fpt/red_shukai2']#'../data/fpt/red_not_pittiri', '../data/fpt/fpt_red_siro_wall'
-        self.notred_data_folders = ['../data/fpt/not_red_shukai', '../data/fpt/not_red_signal', '../data/fpt/not_red_wall', '../data/fpt/not_red_wall2', '../data/not_red_from_itweek', '../data/notred_whiteblack']
-        self.red_data_folders = ['../data/doll/bkc1']   
-        self.clf_name = 'clf,p'
-        self.scaler_name = 'scaler.p'
+        self.negative_data_folders = jobject["negative_data_folders"]
+        self.positive_data_folders = jobject["positive_data_folders"]
+        self.clf_name = jobject["clf_name"]
+        self.scaler_name = jobject["scaler_name"]
         
         ######Classifiers                            
         self.pred_thresh = 0.65 #Increase to decrease likelihood of detection.
         
         ###### Variable for Classifier and Feature Scaler ##########
-        # self.untrained_clf = RandomForestClassifier(n_estimators=100, max_features = 2, min_samples_leaf = 4,max_depth = 25)
+        # self.untrained_svm = RandomForestClassifier(n_estimators=100, max_features = 2, min_samples_leaf = 4,max_depth = 25)
         tuned_parameters = [{'C': [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]}]
         # tuned_parameters = [{'C': [0.1]}]
         self.grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
 
-        self.trained_clf, self.scaler = self.__get_classifier_and_scaler()
+        self.trained_svm, self.scaler = self.__get_classifier_and_scaler()
 
     def __get_classifier_and_scaler(self):
         """
@@ -61,8 +63,9 @@ class WindowFinder(object):
         """
         if self.load_saved:
             print('Loading saved classifier and scaler...')
-            clf = pickle.load( open( "./cache/" + self.clf_name, "rb" ) )
-            scaler = pickle.load(open( "./cache/" + self.scaler_name, "rb" ))
+            print(str("./cache/" + self.clf_name))
+            clf = pickle.load( open( "./cache/doll_clf.p", "rb" ) )
+            scaler = pickle.load(open( "./cache/doll_scaler.p", "rb" ))
             print(clf.get_params())
 
             np.set_printoptions(suppress=True)	
@@ -138,11 +141,11 @@ class WindowFinder(object):
             reds = []
             filenames = []
 
-            for folder in self.notred_data_folders:
+            for folder in self.negative_data_folders:
                 image_paths =glob.glob(folder+'/*')
                 for path in image_paths:
                     notreds.append(path)
-            for folder in self.red_data_folders:
+            for folder in self.positive_data_folders:
                 image_paths =glob.glob(folder+'/*')
                 for path in image_paths:
                     reds.append(path)
@@ -259,16 +262,16 @@ class WindowFinder(object):
     # Define a function to extract features from a list of images
     # Have this function call bin_spatial() and color_hist()
     def predictoneimage(self, img):
-        test_image = cv2.resize(img, (64, 32), cv2.INTER_LINEAR)
+        test_image = cv2.resize(img, (128, 64), cv2.INTER_LINEAR)
         features = self.__single_img_features(test_image)
         test_features = self.scaler.transform(np.array(features).reshape(1, -1))
-        bias = self.trained_clf.intercept_
-        dot = np.dot(self.trained_clf.coef_[0], test_features[0]) 
+        bias = self.trained_svm.intercept_
+        dot = np.dot(self.trained_svm.coef_[0], test_features[0]) 
         rst = dot + bias
         sigmoided_rst = 1/(1+np.exp(-1*rst))
         print(dot.shape)
         print("rst:", rst, "sigmoid:", sigmoided_rst)
-        # prediction = self.trained_clf.predict_proba(test_features)[:,1]
-        prediction = 1/(1+(np.exp(-1*self.trained_clf.decision_function(test_features))))
+        # prediction = self.trained_svm.predict_proba(test_features)[:,1]
+        prediction = 1/(1+(np.exp(-1*self.trained_svm.decision_function(test_features))))
         print(prediction)
         return prediction
