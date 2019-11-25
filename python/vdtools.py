@@ -31,7 +31,6 @@ class WindowFinder(object):
             jobject = json.loads(f.read())
         self.spatial_size = (jobject["spatial_size"], jobject["spatial_size"])
         self.spatial_feat = jobject["spatial_feat"]# Spatial features on or off
-        self.hist_feat = jobject["hist_feat"]# Loads classifier and scaler
         self.hog_feat = jobject["hog_feat"]# HOG features on or off
 
         ### Hyperparameters, if changed ->(load_saved = False) If
@@ -249,15 +248,6 @@ class WindowFinder(object):
     def __bin_spatial(self, img):
         features = cv2.resize(img, self.spatial_size, cv2.INTER_LINEAR)
         return features
-
-    # Define a function to compute color histogram features 
-    # NEED TO CHANGE bins_range if reading .png files with mpimg!
-    def __color_hist(self, img, bins_range=(0, 256)):
-        channel1_hist = np.histogram(img[:,:,0], bins=[0, 21, 42, 64, 85,106, 128, 149, 170, 192, 213, 234, 256])
-        channel2_hist = np.histogram(img[:,:,1], bins=[0, 21, 42, 64, 85,106, 128, 149, 170, 192, 213, 234, 256])
-        channel3_hist = np.histogram(img[:,:,2], bins=[0, 21, 42, 64, 85,106, 128, 149, 170, 192, 213, 234, 256])
-        hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
-        return hist_features
 
     # Define a function to extract features from a list of images
     # Have this function call bin_spatial() and color_hist()
