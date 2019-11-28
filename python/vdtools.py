@@ -134,7 +134,7 @@ class WindowFinder(object):
         else:
             pass
         #get filename
-        test_filenames = shuffle(filenames, random_state=rand_state)[len(scaled_X) - len(preds):]
+        test_filenames = shuffle(filenames, random_state=rand_state)[:len(scaled_X) - len(preds)]
         print(len(test_filenames), len(preds))
         for i, proba in enumerate(preds):
             correct = False
