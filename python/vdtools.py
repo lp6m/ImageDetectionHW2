@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage.measurements import label
 from skimage.feature import hog
 from sklearn.svm import LinearSVC
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.metrics import recall_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -35,25 +36,33 @@ class WindowFinder(object):
 
         ### Hyperparameters, if changed ->(load_saved = False) If
         ### the classifier is changes load_feaures can be True
-        self.load_saved     = True # Histogram features on or off
-        self.load_features  = False # Loads saved features (to train new classifier)
+        self.load_saved     = False # Histogram features on or off
+        self.load_features  = True # Loads saved features (to train new classifier)
 
         # The locations of all the data.   
         self.negative_data_folders = jobject["negative_data_folders"]
         self.positive_data_folders = jobject["positive_data_folders"]
-        self.clf_name = jobject["clf_name"]
+
+        self.svm_clf_name = jobject["svm_clf_name"]
+        self.rf_clf_name = jobject["rf_clf_name"]
+        self.svm_enable = jobject["svm_enable"]
+        self.rf_enable = jobject["rf_enable"]
+
         self.scaler_name = jobject["scaler_name"]
+        self.scaler_mean_name = jobject["scaler_mean_name"]
+        self.scaler_std_name = jobject["scaler_std_name"]
         
         ######Classifiers                            
         self.pred_thresh = 0.65 #Increase to decrease likelihood of detection.
         
         ###### Variable for Classifier and Feature Scaler ##########
-        # self.untrained_svm = RandomForestClassifier(n_estimators=100, max_features = 2, min_samples_leaf = 4,max_depth = 25)
+        #SVM
         tuned_parameters = [{'C': [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]}]
-        # tuned_parameters = [{'C': [0.1]}]
         self.grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
+        #RF
+        self.untrained_rf = RandomForestClassifier(n_estimators=100, max_features='sqrt', min_samples_leaf = 4,max_depth = 25)
 
-        self.trained_svm, self.scaler = self.__get_classifier_and_scaler()
+        self.trained_svm, self.trained_rf, self.scaler = self.__get_classifier_and_scaler()
 
     def __get_classifier_and_scaler(self):
         """
@@ -62,11 +71,10 @@ class WindowFinder(object):
         """
         if self.load_saved:
             print('Loading saved classifier and scaler...')
-            print(str("./cache/" + self.clf_name))
-            clf = pickle.load( open( "./cache/doll_clf.p", "rb" ) )
-            scaler = pickle.load(open( "./cache/doll_scaler.p", "rb" ))
-            print(clf.get_params())
-
+            svm_clf = pickle.load( open( "./cache/" + self.svm_clf_name, "rb")) if self.svm_enable else None
+            rf_clf = pickle.load( open( "./cache/" + self.rf_clf_name, "rb")) if self.rf_enable else None
+            scaler = pickle.load(open( "./cache/" + self.scaler_name, "rb"))
+            
             np.set_printoptions(suppress=True)	
             np.set_printoptions(precision=6, floatmode='fixed')
         else:
@@ -75,55 +83,76 @@ class WindowFinder(object):
             rand_state = np.random.randint(0, 100)
             
             notred_features, red_features, filenames = self.__get_features()
-            scaled_X, y, scaler = self.__get_scaled_X_y(notred_features, red_features)
+            scaled_X, y, scaler, mean, std = self.__get_scaled_X_y(notred_features, red_features)
 
             test_size = 0.05
             X_train, X_test, y_train, y_test = train_test_split(
                 scaled_X, y, test_size=test_size, random_state=rand_state)
-
-            gscv = self.grid_search
             # Check the training time for the SVC
-            t=time.time()
-            gscv.fit(X_train, y_train)
-            t2 = time.time()
-            print(round(t2-t, 2), 'Seconds to train CLF...')
-            # Extract best estimator
-            clf = gscv.best_estimator_
-            print('Grid Search is finished, search result of  C =', clf.C)
+            svm_clf = None
+            if self.svm_enable:
+                t=time.time()
+                gscv = self.grid_search
+                gscv.fit(X_train, y_train)
+                t2 = time.time()
+                print(round(t2-t, 2), 'Seconds to train CLF...')
+                # Extract best estimator
+                svm_clf = gscv.best_estimator_
+                print('Grid Search is finished, search result of  C =', svm_clf.C)
+                self.__test_classifier(svm_clf, X_test, y_test, scaled_X, filenames, rand_state)
+            
+            rf_clf = None
+            if self.rf_enable:
+                t=time.time()
+                rf_clf = self.untrained_rf
+                print(X_train, y_train)
+                rf_clf.fit(X_train, y_train)
+                t2 = time.time()
+                print(round(t2-t, 2), 'Seconds to train CLF...')
+                self.__test_classifier(rf_clf, X_test, y_test, scaled_X, filenames, rand_state)
 
-            # Check the score of the SVC
-            # preds = clf.predict_proba(X_test)
-            # preds = clf.decision_function(X_test)
-            preds = 1/(1+(np.exp(-1*clf.decision_function(X_test))))
-            print(preds)
-            #get filename
-            test_filenames = shuffle(filenames, random_state=rand_state)[len(scaled_X) - len(preds):]
-            print(len(test_filenames), len(preds))
-            for i, proba in enumerate(preds):
-                correct = False
-                ans = -1
-                ans_proba = 0
-                if proba < 0.5:
-                    ans = 0
-                    ans_proba = (1.0-proba)*100.0
-                else:
-                    ans = 1
-                    ans_proba = proba * 100.0
-                if ans == y_test[i]:
-                    correct = True
-                if correct == False:
-                    print('\033[31mproba = {}, predict = {}, correct = {}, testcase = {}\033[0m'.format(round(ans_proba, 3), ans, correct, test_filenames[i]))
-                else:
-                    print('proba = {}, predict = {}, correct = {}, testcase = {}'.format(round(ans_proba, 3), ans, correct, test_filenames[i]))
-            # Check the prediction time for a single sample
-            t=time.time()
-
+            
+            
             print('Pickling classifier and scaler...')
-            pickle.dump( clf, open( "./cache/" + self.clf_name, "wb" ) )
-            pickle.dump( scaler, open( "./cache/" + self.scaler_name, "wb" ) )
+            if self.svm_enable:
+                pickle.dump(svm_clf, open( "./cache/" + self.svm_clf_name, "wb" )) 
+            if self.rf_enable:
+                pickle.dump(rf_clf, open( "./cache/" + self.rf_clf_name, "wb" )) 
 
-        return clf, scaler
+            pickle.dump(scaler, open( "./cache/" + self.scaler_name, "wb" ) )
+            pickle.dump(mean, open( "./cache/" + self.scaler_mean_name, "wb"))
+            pickle.dump(std, open( "./cache/" + self.scaler_std_name, "wb"))
+
+        return svm_clf, rf_clf, scaler
            
+    def __test_classifier(self, clf, X_test, y_test, scaled_X, filenames, rand_state):
+        # Check the score of the Classifier
+        if isinstance(clf, LinearSVC):
+            preds = 1/(1+(np.exp(-1*clf.decision_function(X_test))))
+        elif isinstance(clf, RandomForestClassifier):
+            preds = list(map(lambda x: x[1] / (x[0] + x[1]), clf.predict_proba(X_test)))
+        else:
+            pass
+        #get filename
+        test_filenames = shuffle(filenames, random_state=rand_state)[len(scaled_X) - len(preds):]
+        print(len(test_filenames), len(preds))
+        for i, proba in enumerate(preds):
+            correct = False
+            ans = -1
+            ans_proba = 0
+            if proba < 0.5:
+                ans = 0
+                ans_proba = (1.0-proba)*100.0
+            else:
+                ans = 1
+                ans_proba = proba * 100.0
+            if ans == y_test[i]:
+                correct = True
+            if correct == False:
+                print('\033[31mproba = {}, predict = {}, answer = {}, testcase = {}\033[0m'.format(round(ans_proba, 3), ans, int(y_test[i]), test_filenames[i]))
+            else:
+                print('proba = {}, predict = {}, answer = {}, testcase = {}'.format(round(ans_proba, 3), ans, int(y_test[i]), test_filenames[i]))
+
     def __get_features(self):
         """
         Gets features either by loading them from cache, or by extracting them from the data.
@@ -152,6 +181,8 @@ class WindowFinder(object):
             filenames.extend(notreds)
             filenames.extend(reds)
 
+            print("netative input data num : ", len(notreds))
+            print("positive input data num : ", len(reds))
             start = time.clock()
             notred_features = self.__extract_features(notreds)
             red_features = self.__extract_features(reds)
@@ -234,10 +265,8 @@ class WindowFinder(object):
         # Pickle scaler parameter
         mean = np.nanmean(np.array(X), axis=0)
         std = np.nanstd(np.array(X), axis=0)
-        pickle.dump(mean, open( "./cache/scaler_mean.p", "wb"))
-        pickle.dump(std, open( "./cache/scaler_std.p", "wb"))
 
-        return scaled_X, y, X_scaler
+        return scaled_X, y, X_scaler, mean, std
 
     # Define a function to return HOG features and visualization
     def __get_hog_features(self, img, vis=False, feature_vec=True):
@@ -255,13 +284,17 @@ class WindowFinder(object):
         test_image = cv2.resize(img, (128, 64), cv2.INTER_LINEAR)
         features = self.__single_img_features(test_image)
         test_features = self.scaler.transform(np.array(features).reshape(1, -1))
-        bias = self.trained_svm.intercept_
-        dot = np.dot(self.trained_svm.coef_[0], test_features[0]) 
-        rst = dot + bias
-        sigmoided_rst = 1/(1+np.exp(-1*rst))
-        print(dot.shape)
-        print("rst:", rst, "sigmoid:", sigmoided_rst)
         # prediction = self.trained_svm.predict_proba(test_features)[:,1]
-        prediction = 1/(1+(np.exp(-1*self.trained_svm.decision_function(test_features))))
-        print(prediction)
-        return prediction
+        svm_prediction = 0
+        rf_prediction = 0
+        if self.svm_enable:
+            bias = self.trained_svm.intercept_
+            dot = np.dot(self.trained_svm.coef_[0], test_features[0]) 
+            rst = dot + bias
+            sigmoided_rst = 1/(1+np.exp(-1*rst))
+            print(dot.shape)
+            print("rst:", rst, "sigmoid:", sigmoided_rst)
+            svm_prediction = 1/(1+(np.exp(-1*self.trained_svm.decision_function(test_features))))
+        if self.rf_enable:
+            rf_prediction = self.trained_rf.predict_proba(test_features)[:,1]
+        return svm_prediction, rf_prediction
