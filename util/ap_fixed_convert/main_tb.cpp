@@ -7,6 +7,15 @@
 
 using namespace std;
 
+#define INPUT_WIDTH 128
+#define INPUT_HEIGHT 64
+#define CELL_SIZE 8
+#define BLOCK_SIZE 2
+#define CELL_NUM_WIDTH (INPUT_WIDTH/CELL_SIZE)
+#define CELL_NUM_HEIGHT (INPUT_HEIGHT/CELL_SIZE)
+#define BLOCK_NUM_WIDTH (CELL_NUM_WIDTH-1)
+#define BLOCK_NUM_HEIGHT (CELL_NUM_HEIGHT-1)
+
 unsigned int convFixedToUint(ap_fixed<32, 10> val){
 	unsigned int res = 0;
 	string str = val.to_string(2, false);
@@ -84,7 +93,7 @@ struct hogblock{
 };
 bgr bgrweight[32];
 hsv hsvweight[32];
-hogblock hogweight[21];
+hogblock hogweight[BLOCK_NUM_HEIGHT*BLOCK_NUM_WIDTH];
 
 string joinstr(vector<string> arr){
 	string rst = "";
@@ -127,9 +136,9 @@ int main(){
 		}
 	}
 
-	for(int y = 0; y < 3; y++){
-		for(int x = 0; x < 7; x++){
-			int index = y * 7 + x;
+	for(int y = 0; y < BLOCK_NUM_HEIGHT; y++){
+		for(int x = 0; x < BLOCK_NUM_WIDTH; x++){
+			int index = y * BLOCK_NUM_WIDTH + x;
 			//ul, ur, bl, br
 			for(int blocki = 0; blocki < 4; blocki++){
 				for(int bini = 0; bini < 9; bini++){
@@ -239,46 +248,20 @@ int main(){
 	jsonstr += "],\n";
 
 	//hog_w1
-	strs.clear();
-	jsonstr += "\"hog_w1\" : [";
-	for(int i = 0; i < 7; i++){
-		for(int j = 0; j < 9; j++){
-			strs.push_back(to_string(convFixedToUint(hogweight[i].br[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].bl[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ur[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ul[j])));
-		}
+	for(int k = 0; k < BLOCK_NUM_HEIGHT; k++){
+    strs.clear();
+    jsonstr += "\"hog_w" + to_string(k+1) + "\" : [";
+    for(int i = BLOCK_NUM_WIDTH * k; i < BLOCK_NUM_WIDTH + BLOCK_NUM_WIDTH * k; i++){
+      for(int j = 0; j < 9; j++){
+        strs.push_back(to_string(convFixedToUint(hogweight[i].br[j])));
+        strs.push_back(to_string(convFixedToUint(hogweight[i].bl[j])));
+        strs.push_back(to_string(convFixedToUint(hogweight[i].ur[j])));
+        strs.push_back(to_string(convFixedToUint(hogweight[i].ul[j])));
+      }
+    }
+    jsonstr += joinstr(strs);
+    jsonstr += "],\n";
 	}
-	jsonstr += joinstr(strs);
-	jsonstr += "],\n";
-
-	//hog_w1
-	strs.clear();
-	jsonstr += "\"hog_w2\" : [";
-	for(int i = 7; i < 14; i++){
-		for(int j = 0; j < 9; j++){
-			strs.push_back(to_string(convFixedToUint(hogweight[i].br[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].bl[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ur[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ul[j])));
-		}
-	}
-	jsonstr += joinstr(strs);
-	jsonstr += "],\n";
-
-	//hog_w1
-	strs.clear();
-	jsonstr += "\"hog_w3\" : [";
-	for(int i = 14; i < 21; i++){
-		for(int j = 0; j < 9; j++){
-			strs.push_back(to_string(convFixedToUint(hogweight[i].br[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].bl[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ur[j])));
-			strs.push_back(to_string(convFixedToUint(hogweight[i].ul[j])));
-		}
-	}
-	jsonstr += joinstr(strs);
-	jsonstr += "]\n";
 
 	//end
 	jsonstr += "}";
