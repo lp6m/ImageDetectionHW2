@@ -21,6 +21,8 @@ from sklearn.utils import shuffle
 from sklearn import svm
 from sklearn.externals import joblib
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import make_scorer
+from sklearn.metrics import f1_score
 
 class WindowFinder(object):
     """Finds windows in an image that contain a car."""
@@ -36,8 +38,8 @@ class WindowFinder(object):
 
         ### Hyperparameters, if changed ->(load_saved = False) If
         ### the classifier is changes load_feaures can be True
-        self.load_saved     = False # Histogram features on or off
-        self.load_features  = True # Loads saved features (to train new classifier)
+        self.load_saved     = True # Histogram features on or off
+        self.load_features  = False # Loads saved features (to train new classifier)
 
         # The locations of all the data.   
         self.negative_data_folders = jobject["negative_data_folders"]
@@ -58,9 +60,16 @@ class WindowFinder(object):
         ###### Variable for Classifier and Feature Scaler ##########
         #SVM
         tuned_parameters = [{'C': [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]}]
-        self.grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
+        self.svm_grid_search = GridSearchCV(svm.LinearSVC(max_iter = 1000000), tuned_parameters, cv=5)
         #RF
-        self.untrained_rf = RandomForestClassifier(n_estimators=100, max_features='sqrt', min_samples_leaf = 4,max_depth = 25)
+        forest_grid_param = {
+            'n_estimators': [100],
+            'max_features': [2, 4, 8, 'auto'],
+            'max_depth': [25],
+            'min_samples_leaf': [2, 4, 8]
+        }
+        f1_scoring = make_scorer(f1_score,  pos_label=1)
+        self.forest_grid_search = GridSearchCV(RandomForestClassifier(random_state=0, n_jobs=4), forest_grid_param, scoring=f1_scoring, cv=4)
 
         self.trained_svm, self.trained_rf, self.scaler = self.__get_classifier_and_scaler()
 
@@ -92,7 +101,7 @@ class WindowFinder(object):
             svm_clf = None
             if self.svm_enable:
                 t=time.time()
-                gscv = self.grid_search
+                gscv = self.svm_grid_search
                 gscv.fit(X_train, y_train)
                 t2 = time.time()
                 print(round(t2-t, 2), 'Seconds to train CLF...')
@@ -104,9 +113,12 @@ class WindowFinder(object):
             rf_clf = None
             if self.rf_enable:
                 t=time.time()
-                rf_clf = self.untrained_rf
+                gscv = self.forest_grid_search
                 print(X_train, y_train)
-                rf_clf.fit(X_train, y_train)
+                gscv.fit(X_train, y_train)
+                # Extract best estimator
+                rf_clf = gscv.best_estimator_
+                print('Best parameters: {}'.format(gscv.best_params_))
                 t2 = time.time()
                 print(round(t2-t, 2), 'Seconds to train CLF...')
                 self.__test_classifier(rf_clf, X_test, y_test, scaled_X, filenames, rand_state)
@@ -134,7 +146,7 @@ class WindowFinder(object):
         else:
             pass
         #get filename
-        test_filenames = shuffle(filenames, random_state=rand_state)[:len(scaled_X) - len(preds)]
+        test_filenames = shuffle(filenames, random_state=rand_state)[:len(preds)]
         print(len(test_filenames), len(preds))
         for i, proba in enumerate(preds):
             correct = False
@@ -178,14 +190,19 @@ class WindowFinder(object):
                 for path in image_paths:
                     reds.append(path)
 
+            #same input data num for RF
+            #sample_size = min(len(notreds), len(reds))
+            #notreds = notreds[0:sample_size]
+            #reds =  reds[0:sample_size]
+
             filenames.extend(notreds)
             filenames.extend(reds)
-
             print("netative input data num : ", len(notreds))
             print("positive input data num : ", len(reds))
             start = time.clock()
             notred_features = self.__extract_features(notreds)
             red_features = self.__extract_features(reds)
+
 
             end = time.clock()
             print("Running time : %s seconds" % (end - start))
