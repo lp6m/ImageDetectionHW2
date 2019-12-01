@@ -3,12 +3,12 @@ from skimage.feature import hog
 import numpy as np
 import math
 
-INPUT_WIDTH = 64
-INPUT_HEIGHT = 32 
+INPUT_WIDTH = 128
+INPUT_HEIGHT = 64 
 CELL_SIZE = 8
 BLOCK_SIZE = 2
-CELL_NUM_WIDTH = (INPUT_WIDTH/CELL_SIZE)
-CELL_NUM_HEIGHT = (INPUT_HEIGHT/CELL_SIZE)
+CELL_NUM_WIDTH = (INPUT_WIDTH//CELL_SIZE)
+CELL_NUM_HEIGHT = (INPUT_HEIGHT//CELL_SIZE)
 BLOCK_NUM_WIDTH = (CELL_NUM_WIDTH-1)
 BLOCK_NUM_HEIGHT = (CELL_NUM_HEIGHT-1)
 
@@ -49,13 +49,13 @@ lut2 = [0,1,3,5,6,8,10,12,13,15,17,19,20,22,24,25,27,29,31,32,34,36,38,39,41,43,
 lut3 = [0,5,11,17,22,28,34,39,45,51,56,62,68,73,79,85,90,96,102,107,113,119,124,130,136,141,147,153,158,164,170,175,181,187,192,198,204,209,215,221,226,232,238,243,249,255,260,266,272,277,283,289,294,300,306,311,317,323,328,334,340,345,351,357,362,368,374,379,385,391,396,402,408,413,419,425,430,436,442,447,453,459,464,470,476,481,487,493,498,504,510,515,521,527,532,538,544,549,555,561,566,572,578,584,589,595,601,606,612,618,623,629,635,640,646,652,657,663,669,674,680,686,691,697,703,708,714,720,725,731,737,742,748,754,759,765,771,776,782,788,793,799,805,810,816,822,827,833,839,844,850,856,861,867,873,878,884,890,895,901,907,912,918,924,929,935,941,946,952,958,963,969,975,980,986,992,997,1003,1009,1014,1020,1026,1031,1037,1043,1048,1054,1060,1065,1071,1077,1082,1088,1094,1099,1105,1111,1116,1122,1128,1133,1139,1145,1150,1156,1162,1168,1173,1179,1185,1190,1196,1202,1207,1213,1219,1224,1230,1236,1241,1247,1253,1258,1264,1270,1275,1281,1287,1292,1298,1304,1309,1315,1321,1326,1332,1338,1343,1349,1355,1360,1366,1372,1377,1383,1389,1394,1400,1406,1411,1417,1423,1428,1434,1440,1445]
 
 def myhog(input_image):
-    sum_of_block = [0] * BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT
-    descriptor = [0] * BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT * BLOCK_SIZE * BLOCK_SIZE * 9
-    dst = [0] * BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT * BLOCK_SIZE * BLOCK_SIZE * 9 
+    sum_of_block = np.zeros(BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT, dtype = 'float64')
+    descriptor = np.zeros(BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT * BLOCK_SIZE * BLOCK_SIZE * 9, dtype = 'float64')
+    dst = np.zeros(BLOCK_NUM_WIDTH * BLOCK_NUM_HEIGHT * BLOCK_SIZE * BLOCK_SIZE * 9, dtype = 'float64')
     gxlist = []
 
-    binarray = [0] * (INPUT_WIDTH*INPUT_HEIGHT)
-    magarray = [0] * (INPUT_WIDTH*INPUT_HEIGHT)
+    binarray = np.zeros(INPUT_WIDTH*INPUT_HEIGHT, dtype = int)
+    magarray = np.zeros(INPUT_WIDTH*INPUT_HEIGHT, dtype = 'float64')
     image = cv2.resize(input_image, (INPUT_WIDTH, INPUT_HEIGHT))
     image = image.astype(np.int16)
 
@@ -72,7 +72,8 @@ def myhog(input_image):
                 a = np.array([image[y][x+1], image[y+1][x]])
                 b = np.array([image[y][x-1], image[y-1][x]])
 
-                mag = np.linalg.norm(a-b)
+                # mag = np.linalg.norm(a-b)
+                mag = approx_distance(Gx, Gy)
                 #bin_index = np.int((np.rad2deg(np.arctan2(Gx, Gy)) % 180) // 20) scikit-learn mode
                 if((Gx >= 0 and Gy >= 0) or (Gx <= 0 and Gy <= 0)):
                     if (abs(Gy) < lut0[abs(Gx)]):
@@ -109,7 +110,6 @@ def myhog(input_image):
                     cell_index = (yy // CELL_SIZE) * BLOCK_SIZE + (xx // CELL_SIZE);
                     block_index = y * BLOCK_NUM_WIDTH + x;
                     descrip_index = block_index * BLOCK_SIZE * BLOCK_SIZE * 9 + cell_index * 9 + bin_index;
-
                     descriptor[descrip_index] += magarray[ny * INPUT_WIDTH + nx];
                     sum_of_block[block_index] += magarray[ny * INPUT_WIDTH + nx];
 
@@ -123,8 +123,8 @@ def myhog(input_image):
                 if sum_of_block[blkIdx] == 0 :
                     dst[index] = 0
                 else:
-                    dst[index] = np.sqrt(descriptor[index] / sum_of_block[blkIdx])
-                    # dst[index] = descriptor[index] / (sum_of_block[blkIdx] + 1e-5)
+                    # dst[index] = np.sqrt(descriptor[index] / sum_of_block[blkIdx])
+                    dst[index] = descriptor[index] / (sum_of_block[blkIdx])
                     
 
     return np.array(dst)
