@@ -38,7 +38,7 @@ class WindowFinder(object):
 
         ### Hyperparameters, if changed ->(load_saved = False) If
         ### the classifier is changes load_feaures can be True
-        self.load_saved     = True # Histogram features on or off
+        self.load_saved     = True #Histogram features on or off
         self.load_features  = False # Loads saved features (to train new classifier)
 
         # The locations of all the data.   
@@ -232,6 +232,7 @@ class WindowFinder(object):
    
 
     def __single_img_features(self, img):
+        img = cv2.resize(img, (128, 64), cv2.INTER_LINEAR)
 
         """
         Define a function to extract features from a single image window
@@ -298,6 +299,7 @@ class WindowFinder(object):
     # Define a function to extract features from a list of images
     # Have this function call bin_spatial() and color_hist()
     def predictoneimage(self, img):
+        # test_image = cv2.resize(img, (128, 64), cv2.INTER_LINEAR)
         test_image = cv2.resize(img, (128, 64), cv2.INTER_LINEAR)
         features = self.__single_img_features(test_image)
         test_features = self.scaler.transform(np.array(features).reshape(1, -1))
