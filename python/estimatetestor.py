@@ -8,7 +8,7 @@ import numpy as np
 import vdtools
 
 parentdir = '../video'
-inputdir = 'itweek_train'
+inputdir = 'bkc2_resize'
 # outputdir = 'output'
 imgname_prefix = 'image_'
 # csvlogfilename = 'crop.csv'
@@ -86,11 +86,13 @@ class MainWindow():
         #result label
         self.resultlabel = Label(self.canvas, bg="black",fg="red",text="",borderwidth=0,font=("",20))
         self.resultlabel.place(relx=0.0, rely=1.0,anchor=SW)
+        self.resultlabel2 = Label(self.canvas, bg="black",fg="green",text="",borderwidth=0,font=("",20))
+        self.resultlabel2.place(relx=1.0, rely=1.0,anchor=SE)
 
         self.__imageRefresh()
 
         #new vdtool instance
-        self.finder = vdtools.WindowFinder()
+        self.finder = vdtools.WindowFinder("doll_3264.json")
     #----------------
     def right_key_pressed(self, event):
         # open next image
@@ -120,8 +122,9 @@ class MainWindow():
         pass
     def mouse_lbutton_released(self, event):
         sx, sy, ex, ey = self.__getCropFrameCoordinate()
-        proba = self.__doEstimate(sx, sy, ex, ey)
-        self.resultlabel["text"] = str(proba)
+        svm_proba, rf_proba = self.__doEstimate(sx, sy, ex, ey)
+        self.resultlabel["text"] = str(svm_proba)
+        self.resultlabel2["text"] = str(rf_proba)
 
             
     def mouse_wheel_moving(self, event):
@@ -153,6 +156,7 @@ class MainWindow():
         #update filename label
         self.filenamelabel["text"] = inputfilepath
         self.resultlabel["text"] = "";
+        self.resultlabel2["text"] = "";
         self.cvimage = cv2.imread(inputfilepath)
     def __cropRectangleRefresh(self):
         sx, sy, ex, ey = self.__getCropFrameCoordinate()
@@ -188,8 +192,9 @@ class MainWindow():
 
     def __doEstimate(self, sx, sy, ex, ey):
         test_crop = self.cvimage[int(sy):int(ey), int(sx):int(ex)]
-        proba = self.finder.predictoneimage(test_crop)
-        return proba
+        # test_crop = cv2.imread("../data/fpt/not_red_shukai/image_0023_1.png")
+        svm_proba, rf_proba = self.finder.predictoneimage(test_crop)
+        return svm_proba, rf_proba
 
 
 #----------------------------------------------------------------------
