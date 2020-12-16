@@ -1,5 +1,5 @@
 # ImageDetectionHW2  
-**The 'heart2019' tag is stable **  https://github.com/lp6m/ImageDetectionHW2/tree/heart2019      
+**The 'heart2019' tag is stable**  https://github.com/lp6m/ImageDetectionHW2/tree/heart2019      
 HOG/BGRHSV + SVM FPGA Implementation of Object Detection  
 This system detects red traffic signal from USB webcam captured image in real time.  
 System runs on Debian/Ubuntu OS on Ultra96(rev1) development board. HW Object Detection Accelerator is implemented in FPGA.  
